@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { Plus, Edit, Trash2 } from "lucide-react"
+import { Plus, Edit, Trash2, Building2 } from "lucide-react"
 
 type Profile = {
   id: string
@@ -20,7 +20,13 @@ type Profile = {
   full_name: string | null
   role: string
   is_active: boolean
+  store_id: string | null
   created_at: string
+}
+
+type Store = {
+  id: string
+  name: string
 }
 
 type Permission = {
@@ -50,10 +56,12 @@ const FEATURES = [
 
 export function UserManagement() {
   const [users, setUsers] = useState<Profile[]>([])
+  const [stores, setStores] = useState<Store[]>([])
   const [permissions, setPermissions] = useState<Record<string, Permission[]>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false)
+  const [isStoreDialogOpen, setIsStoreDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null)
   const [userPermissions, setUserPermissions] = useState<Record<string, boolean>>({})
   const router = useRouter()
@@ -63,13 +71,23 @@ export function UserManagement() {
   const [password, setPassword] = useState("")
   const [fullName, setFullName] = useState("")
   const [role, setRole] = useState("cashier")
+  const [storeId, setStoreId] = useState<string>("none")
   const [isActive, setIsActive] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadUsers()
+    loadStores()
   }, [])
+
+  const loadStores = async () => {
+    const supabase = createClient()
+    const { data } = await supabase.from("stores").select("id, name").eq("is_active", true).order("name")
+    if (data) {
+      setStores(data as Store[])
+    }
+  }
 
   const loadUsers = async () => {
     setIsLoading(true)
@@ -124,13 +142,14 @@ export function UserManagement() {
         // Wait for profile to be created by trigger
         await new Promise((resolve) => setTimeout(resolve, 1000))
 
-        // Update profile with role and active status
+        // Update profile with role, store, and active status
         const { error: profileError } = await supabase
           .from("profiles")
           .update({
             role: role,
             is_active: isActive,
             full_name: fullName,
+            store_id: storeId === "none" ? null : storeId,
           })
           .eq("id", authData.user.id)
 
@@ -143,6 +162,7 @@ export function UserManagement() {
             full_name: fullName,
             role: role,
             is_active: isActive,
+            store_id: storeId === "none" ? null : storeId,
           })
           if (insertError) throw insertError
         }
@@ -167,6 +187,7 @@ export function UserManagement() {
       setPassword("")
       setFullName("")
       setRole("cashier")
+      setStoreId("none")
       setIsActive(true)
       setIsCreateDialogOpen(false)
       await loadUsers()
@@ -190,6 +211,37 @@ export function UserManagement() {
     })
     setUserPermissions(permsMap)
     setIsPermissionsDialogOpen(true)
+  }
+
+  const handleOpenStoreAssignment = (user: Profile) => {
+    setSelectedUser(user)
+    setStoreId(user.store_id || "none")
+    setIsStoreDialogOpen(true)
+  }
+
+  const handleUpdateStoreAssignment = async () => {
+    if (!selectedUser) return
+
+    setIsCreating(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("profiles")
+        .update({ store_id: storeId === "none" ? null : storeId })
+        .eq("id", selectedUser.id)
+
+      if (error) throw error
+
+      setIsStoreDialogOpen(false)
+      setSelectedUser(null)
+      await loadUsers()
+    } catch (error: any) {
+      setError(error.message || "Failed to update store assignment")
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   const handleUpdatePermissions = async () => {
@@ -316,6 +368,22 @@ export function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="store">Store Assignment</Label>
+                <Select value={storeId} onValueChange={setStoreId}>
+                  <SelectTrigger id="store">
+                    <SelectValue placeholder="Select store (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Store (Admin Access)</SelectItem>
+                    {stores.map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        {store.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex items-center space-x-2">
                 <Switch id="isActive" checked={isActive} onCheckedChange={setIsActive} />
                 <Label htmlFor="isActive">Active</Label>
@@ -349,6 +417,7 @@ export function UserManagement() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Store</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Permissions</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -365,6 +434,13 @@ export function UserManagement() {
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      {user.store_id ? (
+                        stores.find((s) => s.id === user.store_id)?.name || "Unknown Store"
+                      ) : (
+                        <span className="text-muted-foreground">No Store</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={user.is_active ? "default" : "destructive"}>
                         {user.is_active ? "Active" : "Inactive"}
                       </Badge>
@@ -374,6 +450,9 @@ export function UserManagement() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenStoreAssignment(user)} title="Assign Store">
+                          <Building2 className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleOpenPermissions(user)} title="Edit Permissions">
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -425,6 +504,43 @@ export function UserManagement() {
             </Button>
             <Button onClick={handleUpdatePermissions} disabled={isCreating}>
               {isCreating ? "Saving..." : "Save Permissions"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Store Assignment Dialog */}
+      <Dialog open={isStoreDialogOpen} onOpenChange={setIsStoreDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Store - {selectedUser?.full_name || selectedUser?.email}</DialogTitle>
+            <DialogDescription>Assign this user to a store. Users without a store assignment have admin access to all stores.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="assign-store">Store</Label>
+              <Select value={storeId} onValueChange={setStoreId}>
+                <SelectTrigger id="assign-store">
+                  <SelectValue placeholder="Select store (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Store (Admin Access)</SelectItem>
+                  {stores.map((store) => (
+                    <SelectItem key={store.id} value={store.id}>
+                      {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {error && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsStoreDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateStoreAssignment} disabled={isCreating}>
+              {isCreating ? "Saving..." : "Save Assignment"}
             </Button>
           </DialogFooter>
         </DialogContent>

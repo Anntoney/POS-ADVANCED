@@ -8,12 +8,26 @@ export type QuotationStatus = "pending" | "sent" | "accepted" | "rejected" | "ex
 
 export type AdjustmentType = "addition" | "subtraction" | "damage" | "loss" | "correction"
 
+export type StockTransferStatus = "pending" | "completed" | "cancelled"
+
+export interface Store {
+  id: string
+  name: string
+  address: string | null
+  phone: string | null
+  email: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Profile {
   id: string
   email: string
   full_name: string | null
   role: UserRole
   is_active: boolean
+  store_id: string | null
   created_at: string
   updated_at: string
 }
@@ -22,6 +36,7 @@ export interface Category {
   id: string
   name: string
   description: string | null
+  store_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -49,6 +64,7 @@ export interface Product {
   min_stock_level: number
   tax_rate: number
   is_active: boolean
+  store_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -64,6 +80,7 @@ export interface Customer {
   country: string | null
   credit_limit: number
   balance: number
+  store_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -78,6 +95,7 @@ export interface Supplier {
   city: string | null
   country: string | null
   balance: number
+  store_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -96,6 +114,7 @@ export interface Sale {
   payment_status: PaymentStatus
   amount_paid: number
   notes: string | null
+  store_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -130,4 +149,18 @@ export interface CustomerPayment {
   notes: string | null
   created_by: string
   created_at: string
+}
+
+export interface StockTransfer {
+  id: string
+  transfer_number: string
+  from_store_id: string
+  to_store_id: string
+  product_id: string
+  quantity: number
+  status: StockTransferStatus
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
 }

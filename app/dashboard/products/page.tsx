@@ -9,10 +9,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getDefaultCurrencyServer } from "@/lib/utils/currency-server"
 import { formatCurrency } from "@/lib/utils/currency"
 import { DownloadProductsReport } from "@/components/products/download-report"
+import { getUserStoreContext } from "@/lib/utils/store-context"
 
 export default async function ProductsPage() {
   const supabase = await createClient()
-  const { data: products } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return null
+  }
+
+  const storeContext = await getUserStoreContext(user.id)
+  
+  let productsQuery = supabase
     .from("products")
     .select(
       `
@@ -21,7 +32,13 @@ export default async function ProductsPage() {
       units (id, name, short_name)
     `,
     )
-    .order("created_at", { ascending: false })
+
+  // Filter by store if user is assigned to a store
+  if (!storeContext.canAccessAllStores && storeContext.storeId) {
+    productsQuery = productsQuery.eq("store_id", storeContext.storeId)
+  }
+
+  const { data: products } = await productsQuery.order("created_at", { ascending: false })
 
   const currency = await getDefaultCurrencyServer()
 

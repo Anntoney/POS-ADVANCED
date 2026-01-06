@@ -35,6 +35,8 @@ export function SalesReport() {
     return new Date().toISOString().split("T")[0]
   })
   const [paymentFilter, setPaymentFilter] = useState<string>("all")
+  const [storeFilter, setStoreFilter] = useState<string>("all")
+  const [stores, setStores] = useState<Array<{ id: string; name: string }>>([])
   const [reportData, setReportData] = useState<SalesReportData[]>([])
   const [paymentSummaries, setPaymentSummaries] = useState<PaymentMethodSummary[]>([])
   const [totalSales, setTotalSales] = useState(0)
@@ -44,6 +46,18 @@ export function SalesReport() {
 
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
+    // Load stores
+    const supabase = createClient()
+    supabase
+      .from("stores")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("name")
+      .then(({ data }) => {
+        if (data) {
+          setStores(data as Array<{ id: string; name: string }>)
+        }
+      })
   }, [])
 
   const fetchReportData = async () => {
@@ -54,9 +68,14 @@ export function SalesReport() {
       // Build query for sales in date range
       let salesQuery = supabase
         .from("sales")
-        .select("id, sale_date, total_amount, subtotal")
+        .select("id, sale_date, total_amount, subtotal, store_id")
         .gte("sale_date", `${startDate}T00:00:00`)
         .lte("sale_date", `${endDate}T23:59:59`)
+
+      // Filter by store if specified
+      if (storeFilter !== "all") {
+        salesQuery = salesQuery.eq("store_id", storeFilter)
+      }
 
       const { data: sales, error: salesError } = await salesQuery
 
@@ -183,7 +202,7 @@ export function SalesReport() {
   useEffect(() => {
     fetchReportData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate, paymentFilter])
+  }, [startDate, endDate, paymentFilter, storeFilter])
 
   const formatPaymentMethods = (methods: string[]) => {
     return methods
@@ -224,7 +243,7 @@ export function SalesReport() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <div className="space-y-2">
               <Label htmlFor="startDate">Start Date</Label>
               <Input
@@ -244,6 +263,22 @@ export function SalesReport() {
                 onChange={(e) => setEndDate(e.target.value)}
                 className="w-full"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="storeFilter">Store</Label>
+              <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <SelectTrigger id="storeFilter" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stores</SelectItem>
+                  {stores.map((store) => (
+                    <SelectItem key={store.id} value={store.id}>
+                      {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="paymentFilter">Payment Method</Label>

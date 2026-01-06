@@ -17,6 +17,7 @@ type Product = {
   name: string
   sku: string
   selling_price: number
+  wholesale_price?: number | null
   stock_quantity: number
   tax_rate: number
   categories: { name: string } | null
@@ -333,36 +334,44 @@ export function POSInterface({
   }
 
   return (
-    <div className="grid h-full grid-cols-1 lg:grid-cols-3 gap-4 p-6">
+    <div className="grid h-full grid-cols-1 lg:grid-cols-3 gap-6 p-6">
       <div className="lg:col-span-2 space-y-4">
         <div>
           <Input
             placeholder="Search products by name or SKU..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            className="h-12 text-lg"
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-4 max-h-[calc(100vh-200px)] overflow-y-auto">
           {filteredProducts.map((product) => (
             <Card
               key={product.id}
               className="cursor-pointer hover:bg-muted transition-colors"
               onClick={() => addToCart(product)}
             >
-              <CardHeader className="p-4">
-                <CardTitle className="text-sm line-clamp-2">{product.name}</CardTitle>
+              <CardHeader className="p-5">
+                <CardTitle className="text-base font-semibold line-clamp-2">{product.name}</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="space-y-1">
-                  <p className="text-lg font-bold">
+              <CardContent className="p-5 pt-0">
+                <div className="space-y-2">
+                  <p className="text-xl font-bold">
                     {currency
                       ? formatCurrency(Number(product.selling_price), currency)
                       : `$${Number(product.selling_price).toFixed(2)}`}
                   </p>
-                  <p className="text-xs text-muted-foreground">Stock: {product.stock_quantity}</p>
+                  {product.wholesale_price && product.wholesale_price > 0 && (
+                    <p className="text-base text-blue-500 dark:text-blue-400 font-medium">
+                      Wholesale: {currency
+                        ? formatCurrency(Number(product.wholesale_price), currency)
+                        : `$${Number(product.wholesale_price).toFixed(2)}`}
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground">Stock: {product.stock_quantity}</p>
                   {product.categories && (
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className="text-sm">
                       {product.categories.name}
                     </Badge>
                   )}
@@ -373,54 +382,54 @@ export function POSInterface({
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
+          <CardHeader className="p-5">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <ShoppingCart className="h-6 w-6" />
               Cart ({cart.length})
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5 p-5">
             {cart.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Cart is empty</p>
+              <p className="text-base text-muted-foreground text-center py-8">Cart is empty</p>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-3 max-h-64 overflow-y-auto">
                 {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center justify-between gap-2 border-b pb-2">
+                  <div key={item.product.id} className="flex items-center justify-between gap-3 border-b pb-3 bg-indigo-50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800 rounded-lg p-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.product.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-base font-semibold truncate text-indigo-900 dark:text-indigo-100">{item.product.name}</p>
+                      <p className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
                         {currency
                           ? formatCurrency(Number(item.product.selling_price), currency)
                           : `$${Number(item.product.selling_price).toFixed(2)}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7"
+                        className="h-9 w-9"
                         onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
                       >
-                        <Minus className="h-3 w-3" />
+                        <Minus className="h-4 w-4" />
                       </Button>
-                      <span className="w-8 text-center text-sm">{item.quantity}</span>
+                      <span className="w-10 text-center text-base font-semibold text-indigo-900 dark:text-indigo-100">{item.quantity}</span>
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7"
+                        className="h-9 w-9"
                         onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
                       >
-                        <Plus className="h-3 w-3" />
+                        <Plus className="h-4 w-4" />
                       </Button>
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7"
+                        className="h-9 w-9"
                         onClick={() => removeFromCart(item.product.id)}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -428,13 +437,13 @@ export function POSInterface({
               </div>
             )}
 
-            <div className="space-y-3 pt-4 border-t">
+            <div className="space-y-4 pt-4 border-t">
               <div className="grid gap-2">
-                <Label htmlFor="customer" className="text-xs">
+                <Label htmlFor="customer" className="text-sm font-medium">
                   Customer (Optional)
                 </Label>
                 <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                  <SelectTrigger id="customer" className="h-9">
+                  <SelectTrigger id="customer" className="h-11 text-base">
                     <SelectValue placeholder="Walk-in Customer" />
                   </SelectTrigger>
                   <SelectContent>
@@ -449,7 +458,7 @@ export function POSInterface({
               </div>
 
               {customers.find((c) => c.id === selectedCustomer) && (
-                <div className="bg-muted p-3 rounded-md text-xs space-y-1">
+                <div className="bg-muted p-4 rounded-md text-sm space-y-2">
                   <div className="flex justify-between">
                     <span>Current Balance:</span>
                     <span className="font-medium">
@@ -490,28 +499,28 @@ export function POSInterface({
                 </div>
               )}
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs">Payment Methods *</Label>
+                  <Label className="text-sm font-medium">Payment Methods *</Label>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={addPayment}
-                    className="h-7 text-xs"
+                    className="h-9 text-sm"
                   >
                     + Add Payment
                   </Button>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {payments.map((payment, index) => (
                     <div key={index} className="flex gap-2 items-start">
-                      <div className="flex-1 space-y-1">
+                      <div className="flex-1 space-y-2">
                         <Select
                           value={payment.method}
                           onValueChange={(value) => updatePayment(index, "method", value)}
                         >
-                          <SelectTrigger className="h-9 text-sm">
+                          <SelectTrigger className="h-11 text-base">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -528,7 +537,7 @@ export function POSInterface({
                           placeholder={`Amount (${currency?.symbol || "$"})`}
                           value={payment.amount}
                           onChange={(e) => updatePayment(index, "amount", e.target.value)}
-                          className="h-9 text-sm"
+                          className="h-11 text-base border-blue-500 focus:border-blue-600 focus:ring-blue-500 bg-blue-50 dark:bg-blue-950/20 text-blue-900 dark:text-blue-100 font-semibold"
                         />
                       </div>
                       {payments.length > 1 && (
@@ -536,10 +545,10 @@ export function POSInterface({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-9 w-9 shrink-0 mt-0"
+                          className="h-11 w-11 shrink-0 mt-0"
                           onClick={() => removePayment(index)}
                         >
-                          <X className="h-4 w-4" />
+                          <X className="h-5 w-5" />
                         </Button>
                       )}
                     </div>
@@ -551,12 +560,12 @@ export function POSInterface({
                     variant="outline"
                     size="sm"
                     onClick={autoFillRemaining}
-                    className="w-full h-8 text-xs"
+                    className="w-full h-10 text-sm"
                   >
                     Fill Remaining ({currency?.symbol || "$"}{getRemainingBalance().toFixed(2)})
                   </Button>
                 )}
-                <div className="flex justify-between text-xs pt-2 border-t">
+                <div className="flex justify-between text-sm pt-2 border-t">
                   <span>Total Paid:</span>
                   <span className="font-semibold">
                     {currency
@@ -565,9 +574,9 @@ export function POSInterface({
                   </span>
                 </div>
                 {getRemainingBalance() > 0 && (
-                  <div className="flex justify-between text-xs text-amber-600">
+                  <div className="flex justify-between text-lg text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/20 p-3 rounded-md border-2 border-amber-400 dark:border-amber-600">
                     <span>Remaining:</span>
-                    <span className="font-semibold">
+                    <span>
                       {currency
                         ? formatCurrency(getRemainingBalance(), currency)
                         : `${currency?.symbol || "$"}${getRemainingBalance().toFixed(2)}`}
@@ -575,9 +584,9 @@ export function POSInterface({
                   </div>
                 )}
                 {getChange() > 0 && (
-                  <div className="flex justify-between text-xs text-green-600 font-semibold bg-green-50 dark:bg-green-950/20 p-2 rounded-md border border-green-200 dark:border-green-900">
-                    <span className="flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
+                  <div className="flex justify-between text-lg text-green-700 dark:text-green-400 font-bold bg-green-50 dark:bg-green-950/20 p-4 rounded-md border-2 border-green-500 dark:border-green-600">
+                    <span className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5" />
                       Change Due:
                     </span>
                     <span>
@@ -588,15 +597,15 @@ export function POSInterface({
                   </div>
                 )}
                 {getRemainingBalance() > 0 && selectedCustomer && (
-                  <p className="text-xs text-amber-600 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
+                  <p className="text-sm text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
                     Balance will be added to customer credit
                     </p>
                   )}
                 </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="discount" className="text-xs">
+                <Label htmlFor="discount" className="text-sm font-medium">
                   Discount ({currency?.symbol || "$"})
                 </Label>
                 <Input
@@ -606,40 +615,40 @@ export function POSInterface({
                   min="0"
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value)}
-                  className="h-9"
+                  className="h-11 text-base border-purple-500 focus:border-purple-600 focus:ring-purple-500 bg-purple-50 dark:bg-purple-950/20 text-purple-900 dark:text-purple-100 font-semibold"
                 />
               </div>
 
-              <div className="space-y-1 text-sm">
+              <div className="space-y-2 text-base">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>
+                  <span className="font-medium">
                     {currency ? formatCurrency(calculateSubtotal(), currency) : `$${calculateSubtotal().toFixed(2)}`}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Tax:</span>
-                  <span>{currency ? formatCurrency(calculateTax(), currency) : `$${calculateTax().toFixed(2)}`}</span>
+                  <span className="font-medium">{currency ? formatCurrency(calculateTax(), currency) : `$${calculateTax().toFixed(2)}`}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Discount:</span>
-                  <span>
+                  <span className="font-medium">
                     -
                     {currency
                       ? formatCurrency(Number.parseFloat(discount || "0"), currency)
                       : `$${Number.parseFloat(discount || "0").toFixed(2)}`}
                   </span>
                 </div>
-                <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                  <span>Total:</span>
-                  <span>
+                <div className="flex justify-between text-xl font-bold pt-3 border-t-2 border-green-500">
+                  <span className="text-green-700 dark:text-green-400">Total:</span>
+                  <span className="text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-950/30 px-3 py-1 rounded-md">
                     {currency ? formatCurrency(calculateTotal(), currency) : `$${calculateTotal().toFixed(2)}`}
                   </span>
                 </div>
               </div>
 
               <Button
-                className="w-full"
+                className="w-full h-12 text-base font-semibold"
                 size="lg"
                 onClick={handleCheckout}
                 disabled={

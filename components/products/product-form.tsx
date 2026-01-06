@@ -53,6 +53,10 @@ export function ProductForm({ product, categories, units }: ProductFormProps) {
       return
     }
 
+    // Get user's store_id
+    const { data: profile } = await supabase.from("profiles").select("store_id").eq("id", user.id).single()
+    const storeId = profile?.store_id || null
+
     const productData = {
       name,
       category_id: categoryId || null,
@@ -61,6 +65,7 @@ export function ProductForm({ product, categories, units }: ProductFormProps) {
       wholesale_price: Number.parseFloat(wholesalePrice),
       stock_quantity: Number.parseInt(stockQuantity),
       is_active: isActive,
+      store_id: storeId,
     }
 
     try {

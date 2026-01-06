@@ -1,0 +1,259 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
+import { ArrowRight, Package } from "lucide-react"
+import type { Store, Product } from "@/lib/types/database"
+
+type ProductWithStore = Product & {
+  store_id: string
+  categories?: { name: string } | null
+  units?: { short_name: string } | null
+}
+
+export function StockTransferForm({ products, stores, userId }: { products: ProductWithStore[]; stores: Store[]; userId: string }) {
+  const [fromStoreId, setFromStoreId] = useState<string>("")
+  const [toStoreId, setToStoreId] = useState<string>("")
+  const [productId, setProductId] = useState<string>("")
+  const [quantity, setQuantity] = useState<string>("")
+  const [notes, setNotes] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+
+  const [availableProducts, setAvailableProducts] = useState<ProductWithStore[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<ProductWithStore | null>(null)
+
+  useEffect(() => {
+    if (fromStoreId) {
+      const filtered = products.filter((p) => p.store_id === fromStoreId && p.is_active && p.stock_quantity > 0)
+      setAvailableProducts(filtered)
+      setProductId("")
+      setSelectedProduct(null)
+    } else {
+      setAvailableProducts([])
+      setProductId("")
+      setSelectedProduct(null)
+    }
+  }, [fromStoreId, products])
+
+  useEffect(() => {
+    if (productId) {
+      const product = availableProducts.find((p) => p.id === productId)
+      setSelectedProduct(product || null)
+      setQuantity("")
+    } else {
+      setSelectedProduct(null)
+    }
+  }, [productId, availableProducts])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!fromStoreId || !toStoreId || !productId || !quantity) {
+      setError("Please fill in all required fields")
+      return
+    }
+
+    if (fromStoreId === toStoreId) {
+      setError("Source and destination stores must be different")
+      return
+    }
+
+    const qty = parseInt(quantity)
+    if (isNaN(qty) || qty <= 0) {
+      setError("Quantity must be a positive number")
+      return
+    }
+
+    if (selectedProduct && qty > selectedProduct.stock_quantity) {
+      setError(`Insufficient stock. Available: ${selectedProduct.stock_quantity}`)
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const supabase = createClient()
+
+      // Generate transfer number
+      const { data: lastTransfer } = await supabase
+        .from("stock_transfers")
+        .select("transfer_number")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single()
+
+      let transferNumber = "TRF-0001"
+      if (lastTransfer?.transfer_number) {
+        const lastNum = parseInt(lastTransfer.transfer_number.split("-")[1] || "0")
+        transferNumber = `TRF-${String(lastNum + 1).padStart(4, "0")}`
+      }
+
+      const { error: insertError } = await supabase.from("stock_transfers").insert({
+        transfer_number: transferNumber,
+        from_store_id: fromStoreId,
+        to_store_id: toStoreId,
+        product_id: productId,
+        quantity: qty,
+        status: "pending",
+        notes: notes.trim() || null,
+        created_by: userId,
+      })
+
+      if (insertError) throw insertError
+
+      // Reset form
+      setFromStoreId("")
+      setToStoreId("")
+      setProductId("")
+      setQuantity("")
+      setNotes("")
+      setSelectedProduct(null)
+
+      router.refresh()
+      alert("Stock transfer created successfully! Complete it from the transfer logs.")
+    } catch (error: any) {
+      setError(error.message || "Failed to create stock transfer")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const activeStores = stores.filter((s) => s.is_active)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Package className="h-5 w-5" />
+          Transfer Stock Between Stores
+        </CardTitle>
+        <CardDescription>Move stock from one store to another</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="fromStore">From Store *</Label>
+              <Select value={fromStoreId} onValueChange={setFromStoreId}>
+                <SelectTrigger id="fromStore">
+                  <SelectValue placeholder="Select source store" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeStores.map((store) => (
+                    <SelectItem key={store.id} value={store.id}>
+                      {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="toStore">To Store *</Label>
+              <Select value={toStoreId} onValueChange={setToStoreId} disabled={!fromStoreId}>
+                <SelectTrigger id="toStore">
+                  <SelectValue placeholder="Select destination store" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeStores
+                    .filter((store) => store.id !== fromStoreId)
+                    .map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        {store.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="product">Product *</Label>
+            <Select value={productId} onValueChange={setProductId} disabled={!fromStoreId}>
+              <SelectTrigger id="product">
+                <SelectValue placeholder="Select product" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableProducts.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name} ({product.stock_quantity} {product.units?.short_name || ""} available)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {availableProducts.length === 0 && fromStoreId && (
+              <p className="text-sm text-muted-foreground">No products with stock available in this store</p>
+            )}
+          </div>
+
+          {selectedProduct && (
+            <div className="bg-muted p-4 rounded-md space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm font-medium">Available Stock:</span>
+                <span className="text-sm">
+                  {selectedProduct.stock_quantity} {selectedProduct.units?.short_name || ""}
+                </span>
+              </div>
+              {selectedProduct.categories && (
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium">Category:</span>
+                  <span className="text-sm">{selectedProduct.categories.name}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="quantity">Quantity *</Label>
+            <Input
+              id="quantity"
+              type="number"
+              min="1"
+              max={selectedProduct?.stock_quantity || undefined}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="Enter quantity"
+              disabled={!productId}
+              required
+            />
+            {selectedProduct && (
+              <p className="text-xs text-muted-foreground">
+                Maximum: {selectedProduct.stock_quantity} {selectedProduct.units?.short_name || ""}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes about this transfer" rows={3} />
+          </div>
+
+          {error && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>}
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => router.back()}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting || !fromStoreId || !toStoreId || !productId || !quantity}>
+              {isSubmitting ? "Creating..." : (
+                <>
+                  Create Transfer <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}

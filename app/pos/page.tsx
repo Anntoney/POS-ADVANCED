@@ -3,6 +3,7 @@ import { POSInterface } from "@/components/pos/pos-interface"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { PermissionGuard } from "@/components/dashboard/permission-guard"
+import { getUserStoreContext } from "@/lib/utils/store-context"
 
 export default async function POSPage() {
   const supabase = await createClient()
@@ -15,17 +16,28 @@ export default async function POSPage() {
     redirect("/auth/login")
   }
 
+  const storeContext = await getUserStoreContext(user.id)
+
+  let productsQuery = supabase
+    .from("products")
+    .select(`
+      *,
+      categories (name),
+      units (short_name)
+    `)
+    .eq("is_active", true)
+
+  let customersQuery = supabase.from("customers").select("id, name, email, balance, credit_limit")
+
+  // Filter by store if user is assigned to a store
+  if (!storeContext.canAccessAllStores && storeContext.storeId) {
+    productsQuery = productsQuery.eq("store_id", storeContext.storeId)
+    customersQuery = customersQuery.eq("store_id", storeContext.storeId)
+  }
+
   const [{ data: products }, { data: customers }] = await Promise.all([
-    supabase
-      .from("products")
-      .select(`
-        *,
-        categories (name),
-        units (short_name)
-      `)
-      .eq("is_active", true)
-      .order("name"),
-    supabase.from("customers").select("id, name, email, balance, credit_limit").order("name"),
+    productsQuery.order("name"),
+    customersQuery.order("name"),
   ])
 
   return (

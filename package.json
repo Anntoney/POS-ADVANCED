@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "migrate:mysql": "tsx scripts/migrate-mysql-to-supabase.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -40,11 +41,13 @@
     "@supabase/ssr": "0.8.0",
     "@supabase/supabase-js": "latest",
     "@vercel/analytics": "1.3.1",
+    "mysql2": "^3.11.0",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
+    "dotenv": "^16.4.5",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
@@ -69,6 +72,7 @@
     "@types/react-dom": "^19",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
+    "tsx": "^4.19.2",
     "tw-animate-css": "1.3.3",
     "typescript": "^5"
   }

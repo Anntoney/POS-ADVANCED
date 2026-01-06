@@ -4,16 +4,33 @@ import { Plus } from "lucide-react"
 import Link from "next/link"
 import { SalesTable } from "@/components/sales/sales-table"
 import { createClient } from "@/lib/supabase/server"
+import { getUserStoreContext } from "@/lib/utils/store-context"
 
 export default async function SalesPage() {
   const supabase = await createClient()
-  const { data: sales } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return null
+  }
+
+  const storeContext = await getUserStoreContext(user.id)
+  
+  let salesQuery = supabase
     .from("sales")
     .select(`
       *,
       customers (name)
     `)
-    .order("created_at", { ascending: false })
+
+  // Filter by store if user is assigned to a store
+  if (!storeContext.canAccessAllStores && storeContext.storeId) {
+    salesQuery = salesQuery.eq("store_id", storeContext.storeId)
+  }
+
+  const { data: sales } = await salesQuery.order("created_at", { ascending: false })
 
   return (
     <div>
