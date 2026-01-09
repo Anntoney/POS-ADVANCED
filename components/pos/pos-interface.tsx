@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Minus, Plus, ShoppingCart, Trash2, AlertCircle, X } from "lucide-react"
+import { Minus, Plus, ShoppingCart, Trash2, AlertCircle, X, Edit } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
@@ -16,6 +17,7 @@ type Product = {
   id: string
   name: string
   sku: string
+  cost_price: number
   selling_price: number
   wholesale_price?: number | null
   stock_quantity: number
@@ -35,6 +37,7 @@ type Customer = {
 type CartItem = {
   product: Product
   quantity: number
+  customPrice?: number // Custom selling price if edited
 }
 
 export function POSInterface({
@@ -53,6 +56,12 @@ export function POSInterface({
   const [isProcessing, setIsProcessing] = useState(false)
   const [currency, setCurrency] = useState<Currency | null>(null)
   const router = useRouter()
+  
+  // Price editing dialog state
+  const [priceDialogOpen, setPriceDialogOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [editedPrice, setEditedPrice] = useState<string>("")
+  const [priceError, setPriceError] = useState<string>("")
 
   type PaymentEntry = {
     method: string
@@ -70,22 +79,74 @@ export function POSInterface({
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.sku.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const addToCart = (product: Product) => {
-    const existingItem = cart.find((item) => item.product.id === product.id)
+  const openPriceDialog = (product: Product) => {
+    if (product.stock_quantity < 1) {
+      alert("Product out of stock")
+      return
+    }
+    setSelectedProduct(product)
+    setEditedPrice(product.selling_price.toString())
+    setPriceError("")
+    setPriceDialogOpen(true)
+  }
+
+  const handlePriceConfirm = () => {
+    if (!selectedProduct) return
+
+    const price = Number.parseFloat(editedPrice)
+    
+    // Validate price
+    if (isNaN(price) || price < 0) {
+      setPriceError("Please enter a valid price")
+      return
+    }
+
+    // Check if price is less than cost price
+    if (price < selectedProduct.cost_price) {
+      setPriceError(`Price cannot be less than cost price (${currency ? formatCurrency(selectedProduct.cost_price, currency) : `$${selectedProduct.cost_price.toFixed(2)}`})`)
+      return
+    }
+
+    // Add to cart with custom price
+    const existingItem = cart.find((item) => item.product.id === selectedProduct.id)
 
     if (existingItem) {
-      if (existingItem.quantity >= product.stock_quantity) {
+      if (existingItem.quantity >= selectedProduct.stock_quantity) {
         alert("Not enough stock available")
+        setPriceDialogOpen(false)
         return
       }
-      setCart(cart.map((item) => (item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)))
+      // If price is different, update it; otherwise just increase quantity
+      if (existingItem.customPrice !== price) {
+        setCart(cart.map((item) => 
+          item.product.id === selectedProduct.id 
+            ? { ...item, quantity: item.quantity + 1, customPrice: price } 
+            : item
+        ))
+      } else {
+        setCart(cart.map((item) => 
+          item.product.id === selectedProduct.id 
+            ? { ...item, quantity: item.quantity + 1 } 
+            : item
+        ))
+      }
     } else {
-      if (product.stock_quantity < 1) {
-        alert("Product out of stock")
-        return
-      }
-      setCart([...cart, { product, quantity: 1 }])
+      setCart([...cart, { 
+        product: selectedProduct, 
+        quantity: 1,
+        customPrice: price !== selectedProduct.selling_price ? price : undefined
+      }])
     }
+
+    setPriceDialogOpen(false)
+    setSelectedProduct(null)
+    setEditedPrice("")
+    setPriceError("")
+  }
+
+  const addToCart = (product: Product) => {
+    // Open price dialog instead of directly adding
+    openPriceDialog(product)
   }
 
   const updateQuantity = (productId: string, newQuantity: number) => {
@@ -109,13 +170,17 @@ export function POSInterface({
     setCart(cart.filter((item) => item.product.id !== productId))
   }
 
+  const getItemPrice = (item: CartItem) => {
+    return item.customPrice !== undefined ? item.customPrice : item.product.selling_price
+  }
+
   const calculateSubtotal = () => {
-    return cart.reduce((sum, item) => sum + Number(item.product.selling_price) * item.quantity, 0)
+    return cart.reduce((sum, item) => sum + getItemPrice(item) * item.quantity, 0)
   }
 
   const calculateTax = () => {
     return cart.reduce((sum, item) => {
-      const itemTotal = Number(item.product.selling_price) * item.quantity
+      const itemTotal = getItemPrice(item) * item.quantity
       return sum + (itemTotal * Number(item.product.tax_rate)) / 100
     }, 0)
   }
@@ -252,7 +317,8 @@ export function POSInterface({
 
       // Insert sale items
       for (const item of cart) {
-        const itemTotal = Number(item.product.selling_price) * item.quantity
+        const itemPrice = getItemPrice(item)
+        const itemTotal = itemPrice * item.quantity
         const itemTax = (itemTotal * Number(item.product.tax_rate)) / 100
 
         const { error: itemError } = await supabase.from("sale_items").insert({
@@ -260,7 +326,7 @@ export function POSInterface({
           product_id: item.product.id,
           product_name: item.product.name,
           quantity: item.quantity,
-          unit_price: item.product.selling_price,
+          unit_price: itemPrice,
           tax_rate: item.product.tax_rate,
           tax_amount: itemTax,
           total_amount: itemTotal + itemTax,
@@ -382,6 +448,81 @@ export function POSInterface({
         </div>
       </div>
 
+      {/* Price Editing Dialog */}
+      <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Selling Price</DialogTitle>
+            <DialogDescription>
+              Set the selling price for this item. Price cannot be less than the cost price (minimum shown below).
+            </DialogDescription>
+          </DialogHeader>
+          {selectedProduct && (
+            <div className="space-y-4 py-4">
+              <div>
+                <p className="text-sm font-medium mb-1">Product</p>
+                <p className="text-base">{selectedProduct.name}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium mb-1">Selling Price</p>
+                  <p className="text-sm text-muted-foreground">
+                    {currency
+                      ? formatCurrency(selectedProduct.selling_price, currency)
+                      : `$${selectedProduct.selling_price.toFixed(2)}`}
+                  </p>
+                </div>
+                {selectedProduct.wholesale_price && selectedProduct.wholesale_price > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Wholesale Price</p>
+                    <p className="text-sm text-muted-foreground">
+                      {currency
+                        ? formatCurrency(Number(selectedProduct.wholesale_price), currency)
+                        : `$${Number(selectedProduct.wholesale_price).toFixed(2)}`}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price">Selling Price *</Label>
+                <Input
+                  id="price"
+                  type="number"
+                  step="0.01"
+                  min={selectedProduct.cost_price}
+                  value={editedPrice}
+                  onChange={(e) => {
+                    setEditedPrice(e.target.value)
+                    setPriceError("")
+                  }}
+                  className={priceError ? "border-red-500" : ""}
+                  placeholder={selectedProduct.selling_price.toString()}
+                />
+                {priceError && (
+                  <p className="text-sm text-red-500 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {priceError}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Minimum: {currency
+                    ? formatCurrency(selectedProduct.cost_price, currency)
+                    : `$${selectedProduct.cost_price.toFixed(2)}`}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPriceDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handlePriceConfirm}>
+              Add to Cart
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="space-y-5">
         <Card>
           <CardHeader className="p-5">
@@ -399,11 +540,19 @@ export function POSInterface({
                   <div key={item.product.id} className="flex items-center justify-between gap-3 border-b pb-3 bg-indigo-50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800 rounded-lg p-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-base font-semibold truncate text-indigo-900 dark:text-indigo-100">{item.product.name}</p>
-                      <p className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
-                        {currency
-                          ? formatCurrency(Number(item.product.selling_price), currency)
-                          : `$${Number(item.product.selling_price).toFixed(2)}`}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
+                          {currency
+                            ? formatCurrency(getItemPrice(item), currency)
+                            : `$${getItemPrice(item).toFixed(2)}`}
+                        </p>
+                        {item.customPrice !== undefined && (
+                          <Badge variant="outline" className="text-xs">
+                            <Edit className="h-3 w-3 mr-1" />
+                            Custom
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
