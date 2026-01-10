@@ -119,13 +119,34 @@ export function SalesReport() {
         return
       }
 
-      // Fetch sale items for filtered sales
+      // Fetch sale items for filtered sales with unit_price
       const { data: saleItems, error: itemsError } = await supabase
         .from("sale_items")
-        .select("sale_id, product_id, product_name, quantity, total_amount")
+        .select("sale_id, product_id, product_name, quantity, total_amount, unit_price")
         .in("sale_id", filteredSaleIds)
 
       if (itemsError) throw itemsError
+
+      // Get unique product IDs to fetch cost prices
+      const productIds = [...new Set(saleItems?.map(item => item.product_id).filter(Boolean) || [])]
+      
+      // Fetch products with cost_price for profit calculation
+      let productsWithCost: Array<{ id: string; cost_price: number }> = []
+      if (productIds.length > 0) {
+        const { data: products, error: productsError } = await supabase
+          .from("products")
+          .select("id, cost_price")
+          .in("id", productIds)
+        
+        if (productsError) throw productsError
+        productsWithCost = products || []
+      }
+
+      // Create a map for quick cost price lookup
+      const costPriceMap = new Map<string, number>()
+      productsWithCost.forEach(product => {
+        costPriceMap.set(product.id, Number(product.cost_price || 0))
+      })
 
       // Process data
       const productMap = new Map<string, SalesReportData>()
@@ -180,7 +201,18 @@ export function SalesReport() {
       // Calculate totals from filtered sales
       const filteredSales = sales.filter((s) => filteredSaleIds.includes(s.id))
       const salesTotal = filteredSales.reduce((sum, sale) => sum + Number(sale.total_amount), 0)
-      const grossTotal = filteredSales.reduce((sum, sale) => sum + Number(sale.subtotal), 0)
+      
+      // Calculate gross profit: (selling_price - cost_price) * quantity for each item
+      let grossTotal = 0
+      saleItems?.forEach((item) => {
+        if (item.product_id) {
+          const costPrice = costPriceMap.get(item.product_id) || 0
+          const sellingPrice = Number(item.unit_price || 0)
+          const quantity = item.quantity
+          const profit = (sellingPrice - costPrice) * quantity
+          grossTotal += profit
+        }
+      })
       
       // Calculate total amount actually paid from payments
       const totalPaidFromPayments = Array.from(paymentMap.values()).reduce((sum, amount) => sum + amount, 0)
@@ -326,7 +358,7 @@ export function SalesReport() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Gross Revenue</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Gross Profit</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">

@@ -42,9 +42,9 @@ export default async function POSPage() {
 
   return (
     <PermissionGuard feature="pos">
-      <div className="h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col">
         <Header title="Point of Sale" showMenu />
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           <POSInterface products={products || []} customers={customers || []} userId={user.id} />
         </div>
       </div>

@@ -400,7 +400,7 @@ export function POSInterface({
   }
 
   return (
-    <div className="grid h-full grid-cols-1 lg:grid-cols-3 gap-6 p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 md:p-6">
       <div className="lg:col-span-2 space-y-4">
         <div>
           <Input
@@ -411,7 +411,7 @@ export function POSInterface({
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-4">
           {filteredProducts.map((product) => (
             <Card
               key={product.id}
@@ -523,19 +523,19 @@ export function POSInterface({
         </DialogContent>
       </Dialog>
 
-      <div className="space-y-5">
-        <Card>
-          <CardHeader className="p-5">
+      <div className="flex flex-col">
+        <Card className="flex flex-col lg:sticky lg:top-4 lg:max-h-[calc(100vh-120px)]">
+          <CardHeader className="p-4 md:p-5 flex-shrink-0 border-b">
             <CardTitle className="flex items-center gap-2 text-lg">
               <ShoppingCart className="h-6 w-6" />
               Cart ({cart.length})
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5 p-5">
+          <CardContent className="space-y-5 p-4 md:p-5 lg:overflow-y-auto lg:flex-1 lg:min-h-0">
             {cart.length === 0 ? (
               <p className="text-base text-muted-foreground text-center py-8">Cart is empty</p>
             ) : (
-              <div className="space-y-3 max-h-64 overflow-y-auto">
+              <div className="space-y-3">
                 {cart.map((item) => (
                   <div key={item.product.id} className="flex items-center justify-between gap-3 border-b pb-3 bg-indigo-50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800 rounded-lg p-3">
                     <div className="flex-1 min-w-0">

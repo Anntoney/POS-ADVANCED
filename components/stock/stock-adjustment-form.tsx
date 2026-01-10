@@ -89,11 +89,13 @@ export function StockAdjustmentForm({ products }: { products: Product[] }) {
 
       if (updateError) throw updateError
 
-      router.push("/dashboard/stock")
-      router.refresh()
+      // Show success message
+      alert("Stock adjusted successfully!")
+      
+      // Force full page refresh to ensure all views are updated
+      window.location.href = "/dashboard/stock"
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
-    } finally {
       setIsLoading(false)
     }
   }
