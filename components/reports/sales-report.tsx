@@ -41,6 +41,7 @@ export function SalesReport() {
   const [paymentSummaries, setPaymentSummaries] = useState<PaymentMethodSummary[]>([])
   const [totalSales, setTotalSales] = useState(0)
   const [totalGross, setTotalGross] = useState(0)
+  const [totalExpenses, setTotalExpenses] = useState(0)
   const [currency, setCurrency] = useState<Currency | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -65,10 +66,10 @@ export function SalesReport() {
     try {
       const supabase = createClient()
 
-      // Build query for sales in date range
+      // Build query for sales in date range - include payment_status to filter credit sales
       let salesQuery = supabase
         .from("sales")
-        .select("id, sale_date, total_amount, subtotal, store_id")
+        .select("id, sale_date, total_amount, subtotal, store_id, payment_status, amount_paid")
         .gte("sale_date", `${startDate}T00:00:00`)
         .lte("sale_date", `${endDate}T23:59:59`)
 
@@ -86,6 +87,7 @@ export function SalesReport() {
         setPaymentSummaries([])
         setTotalSales(0)
         setTotalGross(0)
+        setTotalExpenses(0)
         setIsLoading(false)
         return
       }
@@ -93,7 +95,7 @@ export function SalesReport() {
       // Get sale IDs
       const saleIds = sales.map((s) => s.id)
 
-      // Fetch sale payments
+      // Fetch sale payments for sales made in the date range
       const { data: salePayments, error: paymentsError } = await supabase
         .from("sale_payments")
         .select("sale_id, payment_method, amount")
@@ -101,31 +103,63 @@ export function SalesReport() {
 
       if (paymentsError) throw paymentsError
 
-      // Filter sales by payment method if specified
-      let filteredSaleIds = saleIds
+      // Fetch credit payments (customer_payments) made in the date range
+      // These are payments toward existing credit balances
+      const { data: creditPayments, error: creditPaymentsError } = await supabase
+        .from("customer_payments")
+        .select("payment_method, amount, payment_date")
+        .gte("payment_date", `${startDate}T00:00:00`)
+        .lte("payment_date", `${endDate}T23:59:59`)
+
+      if (creditPaymentsError) throw creditPaymentsError
+
+      // Fetch expenses in the date range
+      let expensesQuery = supabase
+        .from("expenses")
+        .select("amount, payment_method, expense_date")
+        .gte("expense_date", `${startDate}T00:00:00`)
+        .lte("expense_date", `${endDate}T23:59:59`)
+
+      if (storeFilter !== "all") {
+        expensesQuery = expensesQuery.eq("store_id", storeFilter)
+      }
+
+      const { data: expenses, error: expensesError } = await expensesQuery
+      if (expensesError) throw expensesError
+
+      // Filter out unpaid credit sales from totals (only include fully paid credit sales)
+      // Credit sales with payment_status "pending" or "partial" should not be counted until fully paid
+      const paidSales = sales.filter((sale) => {
+        // Exclude unpaid credit sales - only count if fully paid (payment_status = "paid")
+        if (sale.payment_status === "pending" || (sale.payment_status === "partial" && Number(sale.amount_paid || 0) < Number(sale.total_amount))) {
+          return false // Don't count unpaid/partially paid credit sales
+        }
+        return true
+      })
+
+      // Filter by payment method if specified (on paid sales only)
+      let filteredSaleIds = paidSales.map((s) => s.id)
       if (paymentFilter !== "all") {
         const salesWithPaymentMethod = new Set(
           salePayments?.filter((p) => p.payment_method === paymentFilter).map((p) => p.sale_id) || [],
         )
-        filteredSaleIds = sales.filter((s) => salesWithPaymentMethod.has(s.id)).map((s) => s.id)
+        filteredSaleIds = paidSales.filter((s) => salesWithPaymentMethod.has(s.id)).map((s) => s.id)
       }
 
-      if (filteredSaleIds.length === 0) {
-        setReportData([])
-        setPaymentSummaries([])
-        setTotalSales(0)
-        setTotalGross(0)
-        setIsLoading(false)
-        return
-      }
+      // Calculate expenses first (they should always be shown if present)
+      const totalExpensesCalc = expenses?.reduce((sum, exp) => sum + Number(exp.amount || 0), 0) || 0
 
       // Fetch sale items for filtered sales with unit_price
-      const { data: saleItems, error: itemsError } = await supabase
-        .from("sale_items")
-        .select("sale_id, product_id, product_name, quantity, total_amount, unit_price")
-        .in("sale_id", filteredSaleIds)
+      let saleItems: any[] = []
+      if (filteredSaleIds.length > 0) {
+        const { data, error: itemsError } = await supabase
+          .from("sale_items")
+          .select("sale_id, product_id, product_name, quantity, total_amount, unit_price")
+          .in("sale_id", filteredSaleIds)
 
-      if (itemsError) throw itemsError
+        if (itemsError) throw itemsError
+        saleItems = data || []
+      }
 
       // Get unique product IDs to fetch cost prices
       const productIds = [...new Set(saleItems?.map(item => item.product_id).filter(Boolean) || [])]
@@ -152,10 +186,10 @@ export function SalesReport() {
       const productMap = new Map<string, SalesReportData>()
       const paymentMap = new Map<string, number>()
 
-      // Group by product
+      // Group by product - only for fully paid sales
       saleItems?.forEach((item) => {
-        const sale = sales.find((s) => s.id === item.sale_id)
-        if (!sale) return
+        const sale = paidSales.find((s) => s.id === item.sale_id)
+        if (!sale) return // Skip items from unpaid credit sales
 
         const key = item.product_id || item.product_name
         const existing = productMap.get(key)
@@ -174,14 +208,30 @@ export function SalesReport() {
         }
       })
 
-      // Build payment summaries from all filtered sales (not just product-specific)
-      // This ensures totals match
+      // Build payment summaries from paid sales only (exclude unpaid credit sales)
       salePayments
         ?.filter((p) => filteredSaleIds.includes(p.sale_id))
         .forEach((p) => {
           const currentTotal = paymentMap.get(p.payment_method) || 0
           paymentMap.set(p.payment_method, currentTotal + Number(p.amount))
         })
+
+      // Add credit payments (debt clearance) - count under their payment method AND separately
+      let totalCreditPayments = 0
+      creditPayments?.forEach((cp) => {
+        const method = cp.payment_method || "cash"
+        // Add to the payment method used (cash, mobile_money, etc.)
+        const currentTotal = paymentMap.get(method) || 0
+        paymentMap.set(method, currentTotal + Number(cp.amount))
+        
+        // Also track total for separate "Credit Payments" line item
+        totalCreditPayments += Number(cp.amount)
+      })
+
+      // Add separate line for credit payments/debt clearance if any
+      if (totalCreditPayments > 0) {
+        paymentMap.set("debt_clearance", totalCreditPayments)
+      }
 
       // Add payment methods to each product (for display purposes only)
       productMap.forEach((product) => {
@@ -198,14 +248,16 @@ export function SalesReport() {
         product.payment_methods = Array.from(methods)
       })
 
-      // Calculate totals from filtered sales
-      const filteredSales = sales.filter((s) => filteredSaleIds.includes(s.id))
+      // Calculate totals from fully paid sales only (exclude unpaid credit sales)
+      const filteredSales = paidSales.filter((s) => filteredSaleIds.includes(s.id))
       const salesTotal = filteredSales.reduce((sum, sale) => sum + Number(sale.total_amount), 0)
       
       // Calculate gross profit: (selling_price - cost_price) * quantity for each item
+      // Only include items from fully paid sales (already filtered in productMap)
       let grossTotal = 0
       saleItems?.forEach((item) => {
-        if (item.product_id) {
+        // Only calculate profit for items from paid sales
+        if (item.product_id && filteredSaleIds.includes(item.sale_id)) {
           const costPrice = costPriceMap.get(item.product_id) || 0
           const sellingPrice = Number(item.unit_price || 0)
           const quantity = item.quantity
@@ -214,8 +266,10 @@ export function SalesReport() {
         }
       })
       
-      // Calculate total amount actually paid from payments
-      const totalPaidFromPayments = Array.from(paymentMap.values()).reduce((sum, amount) => sum + amount, 0)
+      // Calculate total amount actually paid from payments (excluding debt_clearance as it's already counted in payment methods)
+      const totalPaidFromPayments = Array.from(paymentMap.entries())
+        .filter(([method]) => method !== "debt_clearance")
+        .reduce((sum, [, amount]) => sum + amount, 0)
 
       setReportData(Array.from(productMap.values()))
       setPaymentSummaries(
@@ -223,6 +277,7 @@ export function SalesReport() {
       )
       setTotalSales(salesTotal)
       setTotalGross(grossTotal)
+      setTotalExpenses(totalExpensesCalc)
     } catch (error) {
       console.error("Error fetching report data:", error)
       alert(`Error loading report: ${error instanceof Error ? error.message : "Unknown error"}`)
@@ -343,9 +398,9 @@ export function SalesReport() {
         </CardContent>
       </Card>
 
-      {reportData.length > 0 && (
+      {(reportData.length > 0 || totalExpenses > 0 || paymentSummaries.length > 0) && (
         <>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
@@ -354,6 +409,7 @@ export function SalesReport() {
                 <div className="text-2xl font-bold">
                   {currency ? formatCurrency(totalSales, currency) : `$${totalSales.toFixed(2)}`}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">Paid sales only</p>
               </CardContent>
             </Card>
             <Card>
@@ -364,24 +420,27 @@ export function SalesReport() {
                 <div className="text-2xl font-bold">
                   {currency ? formatCurrency(totalGross, currency) : `$${totalGross.toFixed(2)}`}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">From paid sales</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Amount Paid</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Expenses</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {currency
-                    ? formatCurrency(
-                        paymentSummaries.reduce((sum, p) => sum + p.total, 0),
-                        currency,
-                      )
-                    : `$${paymentSummaries.reduce((sum, p) => sum + p.total, 0).toFixed(2)}`}
+                <div className="text-2xl font-bold text-red-600">
+                  {currency ? formatCurrency(totalExpenses, currency) : `$${totalExpenses.toFixed(2)}`}
                 </div>
-                {paymentSummaries.reduce((sum, p) => sum + p.total, 0) < totalSales && (
-                  <p className="text-xs text-muted-foreground mt-1">Includes credit/pending</p>
-                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Net Profit</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {currency ? formatCurrency(totalGross - totalExpenses, currency) : `$${(totalGross - totalExpenses).toFixed(2)}`}
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -404,13 +463,21 @@ export function SalesReport() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {paymentSummaries.map((summary) => (
-                    <Badge key={summary.method} variant="outline" className="text-base px-3 py-1">
-                      {summary.method.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}:{" "}
-                      {currency ? formatCurrency(summary.total, currency) : `$${summary.total.toFixed(2)}`}
-                    </Badge>
-                  ))}
+                  {paymentSummaries.map((summary) => {
+                    const methodLabel = summary.method === "debt_clearance" 
+                      ? "Credit Payments (Debt Clearance)"
+                      : summary.method.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
+                    return (
+                      <Badge key={summary.method} variant="outline" className="text-base px-3 py-1">
+                        {methodLabel}:{" "}
+                        {currency ? formatCurrency(summary.total, currency) : `$${summary.total.toFixed(2)}`}
+                      </Badge>
+                    )
+                  })}
                 </div>
+                {paymentSummaries.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No payments found for the selected period</p>
+                )}
               </CardContent>
             </Card>
           )}

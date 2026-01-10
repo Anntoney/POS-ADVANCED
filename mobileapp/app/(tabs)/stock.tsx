@@ -7,23 +7,71 @@ import {
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
+  Modal,
+  ScrollView,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { Product } from '@/lib/types';
-import { Ionicons } from '@expo/vector-icons';
+import { Product, Store } from '@/lib/types';
+import { useCurrency } from '@/lib/contexts/CurrencyContext';
+import { useTheme } from '@/lib/contexts/ThemeContext';
+import { formatCurrency } from '@/lib/utils';
 
 export default function StockScreen() {
+  const { currency } = useCurrency();
+  const { colors } = useTheme();
   const [products, setProducts] = useState<Product[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [storeModalVisible, setStoreModalVisible] = useState(false);
+  const [stockAdjustModalVisible, setStockAdjustModalVisible] = useState(false);
+  const [newProductModalVisible, setNewProductModalVisible] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [adjustQuantity, setAdjustQuantity] = useState<string>('');
+  const [adjustReason, setAdjustReason] = useState<string>('');
+  const [isAdjusting, setIsAdjusting] = useState(false);
+
+  // New product form state
+  const [newProductName, setNewProductName] = useState<string>('');
+  const [newProductSku, setNewProductSku] = useState<string>('');
+  const [newProductCostPrice, setNewProductCostPrice] = useState<string>('0');
+  const [newProductSellingPrice, setNewProductSellingPrice] = useState<string>('0');
+  const [newProductStock, setNewProductStock] = useState<string>('0');
+  const [newProductMinStock, setNewProductMinStock] = useState<string>('10');
+  const [newProductStoreId, setNewProductStoreId] = useState<string>('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const loadStores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setStores(data || []);
+    } catch (error) {
+      console.error('Error loading stores:', error);
+    }
+  };
 
   const loadProducts = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('products')
         .select('*')
         .order('stock_quantity', { ascending: true });
+
+      if (selectedStoreId) {
+        query = query.eq('store_id', selectedStoreId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -37,8 +85,15 @@ export default function StockScreen() {
   };
 
   useEffect(() => {
+    loadStores();
     loadProducts();
   }, []);
+
+  useEffect(() => {
+    if (stores.length > 0) {
+      loadProducts();
+    }
+  }, [selectedStoreId]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -57,12 +112,142 @@ export default function StockScreen() {
 
   const getStockStatus = (product: Product) => {
     if (product.stock_quantity === 0) {
-      return { label: 'Out of Stock', color: '#FF3B30', icon: 'close-circle' };
+      return { label: 'Out of Stock', color: colors.error, symbol: '✕' };
     }
     if (product.stock_quantity <= product.min_stock_level) {
-      return { label: 'Low Stock', color: '#FF9500', icon: 'warning' };
+      return { label: 'Low Stock', color: colors.warning, symbol: '⚠' };
     }
-    return { label: 'In Stock', color: '#34C759', icon: 'checkmark-circle' };
+    return { label: 'In Stock', color: colors.success, symbol: '✓' };
+  };
+
+  const handleStockAdjustment = async () => {
+    if (!selectedProduct) return;
+
+    const quantity = parseInt(adjustQuantity);
+    if (isNaN(quantity) || quantity === 0) {
+      Alert.alert('Error', 'Please enter a valid quantity');
+      return;
+    }
+
+    const newQuantity = selectedProduct.stock_quantity + quantity;
+    if (newQuantity < 0) {
+      Alert.alert('Error', 'Stock quantity cannot be negative');
+      return;
+    }
+
+    setIsAdjusting(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in');
+        return;
+      }
+
+      // Update stock quantity
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ stock_quantity: newQuantity })
+        .eq('id', selectedProduct.id);
+
+      if (updateError) throw updateError;
+
+      // Create stock adjustment record
+      const { error: adjustmentError } = await supabase
+        .from('stock_adjustments')
+        .insert({
+          product_id: selectedProduct.id,
+          adjustment_type: quantity > 0 ? 'addition' : 'subtraction',
+          quantity: Math.abs(quantity),
+          reason: adjustReason || null,
+          created_by: user.id,
+          store_id: selectedProduct.store_id || null,
+        });
+
+      if (adjustmentError) throw adjustmentError;
+
+      Alert.alert('Success', `Stock ${quantity > 0 ? 'added' : 'removed'} successfully!`);
+      setStockAdjustModalVisible(false);
+      setAdjustQuantity('');
+      setAdjustReason('');
+      setSelectedProduct(null);
+      loadProducts();
+    } catch (error: any) {
+      console.error('Error adjusting stock:', error);
+      Alert.alert('Error', error.message || 'Failed to adjust stock');
+    } finally {
+      setIsAdjusting(false);
+    }
+  };
+
+  const handleCreateProduct = async () => {
+    if (!newProductName.trim()) {
+      Alert.alert('Error', 'Product name is required');
+      return;
+    }
+
+    if (!newProductSku.trim()) {
+      Alert.alert('Error', 'SKU is required');
+      return;
+    }
+
+    if (!newProductStoreId) {
+      Alert.alert('Error', 'Please select a shop');
+      return;
+    }
+
+    setIsCreating(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in');
+        return;
+      }
+
+      const productData = {
+        name: newProductName.trim(),
+        sku: newProductSku.trim(),
+        cost_price: parseFloat(newProductCostPrice) || 0,
+        selling_price: parseFloat(newProductSellingPrice) || 0,
+        stock_quantity: parseInt(newProductStock) || 0,
+        min_stock_level: parseInt(newProductMinStock) || 10,
+        store_id: newProductStoreId,
+        created_by: user.id,
+        is_active: true,
+      };
+
+      const { error } = await supabase
+        .from('products')
+        .insert(productData);
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Product created successfully!');
+      setNewProductModalVisible(false);
+      // Reset form
+      setNewProductName('');
+      setNewProductSku('');
+      setNewProductCostPrice('0');
+      setNewProductSellingPrice('0');
+      setNewProductStock('0');
+      setNewProductMinStock('10');
+      setNewProductStoreId('');
+      loadProducts();
+    } catch (error: any) {
+      console.error('Error creating product:', error);
+      Alert.alert('Error', error.message || 'Failed to create product');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const openStockAdjustment = (product: Product) => {
+    if (!product) return;
+    setSelectedProduct(product);
+    setAdjustQuantity('');
+    setAdjustReason('');
+    setStockAdjustModalVisible(true);
   };
 
   const renderProduct = ({ item }: { item: Product }) => {
@@ -72,12 +257,15 @@ export default function StockScreen() {
       : 100;
 
     return (
-      <TouchableOpacity style={styles.stockCard}>
+      <TouchableOpacity
+        style={[styles.stockCard, { backgroundColor: colors.surface }]}
+        onPress={() => openStockAdjustment(item)}
+      >
         <View style={styles.stockHeader}>
           <View style={styles.stockInfo}>
-            <Text style={styles.productName}>{item.name}</Text>
+            <Text style={[styles.productName, { color: colors.text }]}>{item.name}</Text>
             {item.sku && (
-              <Text style={styles.productSku}>SKU: {item.sku}</Text>
+              <Text style={[styles.productSku, { color: colors.textSecondary }]}>SKU: {item.sku}</Text>
             )}
           </View>
           <View
@@ -86,7 +274,9 @@ export default function StockScreen() {
               { backgroundColor: `${status.color}20` },
             ]}
           >
-            <Ionicons name={status.icon as any} size={16} color={status.color} />
+            <Text style={[styles.statusSymbol, { color: status.color }]}>
+              {status.symbol}
+            </Text>
             <Text style={[styles.statusText, { color: status.color }]}>
               {status.label}
             </Text>
@@ -95,7 +285,7 @@ export default function StockScreen() {
 
         <View style={styles.stockDetails}>
           <View style={styles.stockBarContainer}>
-            <View style={styles.stockBarBackground}>
+            <View style={[styles.stockBarBackground, { backgroundColor: colors.border }]}>
               <View
                 style={[
                   styles.stockBarFill,
@@ -109,72 +299,191 @@ export default function StockScreen() {
           </View>
           <View style={styles.stockNumbers}>
             <View style={styles.stockNumberItem}>
-              <Text style={styles.stockNumberLabel}>Current</Text>
-              <Text style={styles.stockNumberValue}>{item.stock_quantity}</Text>
+              <Text style={[styles.stockNumberLabel, { color: colors.textSecondary }]}>Current</Text>
+              <Text style={[styles.stockNumberValue, { color: colors.text }]}>{item.stock_quantity}</Text>
             </View>
             <View style={styles.stockNumberItem}>
-              <Text style={styles.stockNumberLabel}>Min Level</Text>
-              <Text style={styles.stockNumberValue}>
+              <Text style={[styles.stockNumberLabel, { color: colors.textSecondary }]}>Min Level</Text>
+              <Text style={[styles.stockNumberValue, { color: colors.text }]}>
                 {item.min_stock_level}
               </Text>
             </View>
+          </View>
+          <View style={styles.productActions}>
+            <Text style={[styles.tapHint, { color: colors.textSecondary }]}>Tap to adjust stock</Text>
           </View>
         </View>
       </TouchableOpacity>
     );
   };
 
+  // Calculate total values
+  const calculateTotalValues = () => {
+    const filtered = getFilteredProducts();
+    const totalSellingValue = filtered.reduce(
+      (sum, p) => sum + (Number(p.selling_price) * Number(p.stock_quantity)),
+      0
+    );
+    const totalBuyingValue = filtered.reduce(
+      (sum, p) => sum + (Number(p.cost_price) * Number(p.stock_quantity)),
+      0
+    );
+    return { totalSellingValue, totalBuyingValue };
+  };
+
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   const filteredProducts = getFilteredProducts();
+  const selectedStore = stores.find((s) => s.id === selectedStoreId);
+  const { totalSellingValue, totalBuyingValue } = calculateTotalValues();
+
+  const stylesWithTheme = StyleSheet.create({
+    ...styles,
+    container: {
+      ...styles.container,
+      backgroundColor: colors.background,
+    },
+    filterButton: {
+      ...styles.filterButton,
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+    },
+    filterButtonActive: {
+      ...styles.filterButtonActive,
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    filterText: {
+      ...styles.filterText,
+      color: colors.textSecondary,
+    },
+    filterTextActive: {
+      ...styles.filterTextActive,
+      color: '#fff',
+    },
+    stockCard: {
+      ...styles.stockCard,
+      backgroundColor: colors.surface,
+    },
+    productName: {
+      ...styles.productName,
+      color: colors.text,
+    },
+    productSku: {
+      ...styles.productSku,
+      color: colors.textSecondary,
+    },
+    stockBarBackground: {
+      ...styles.stockBarBackground,
+      backgroundColor: colors.border,
+    },
+    stockNumberLabel: {
+      ...styles.stockNumberLabel,
+      color: colors.textSecondary,
+    },
+    stockNumberValue: {
+      ...styles.stockNumberValue,
+      color: colors.text,
+    },
+    emptyText: {
+      ...styles.emptyText,
+      color: colors.textSecondary,
+    },
+  });
 
   return (
-    <View style={styles.container}>
+    <View style={stylesWithTheme.container}>
+      <View style={styles.storeFilterContainer}>
+        <TouchableOpacity
+          style={[styles.storeFilterButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => setStoreModalVisible(true)}
+        >
+          <Text style={{ fontSize: 18, marginRight: 8 }}>🏪</Text>
+          <Text style={[styles.storeFilterText, { color: colors.text }]}>
+            {selectedStore ? selectedStore.name : 'All Shops'}
+          </Text>
+          <Text style={{ fontSize: 16, color: colors.textSecondary }}>▼</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Total Values Summary */}
+      <View style={styles.summaryContainer}>
+        <View style={[styles.summaryCard, { backgroundColor: colors.success }]}>
+          <Text style={styles.summaryLabel}>Total Selling Value</Text>
+          <Text style={styles.summaryValue}>
+            {formatCurrency(totalSellingValue, currency || undefined)}
+          </Text>
+          <Text style={styles.summarySubtext}>
+            {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
+          </Text>
+        </View>
+        <View style={[styles.summaryCard, { backgroundColor: colors.warning }]}>
+          <Text style={styles.summaryLabel}>Total Buying Value</Text>
+          <Text style={styles.summaryValue}>
+            {formatCurrency(totalBuyingValue, currency || undefined)}
+          </Text>
+          <Text style={styles.summarySubtext}>
+            Potential Profit: {formatCurrency(totalSellingValue - totalBuyingValue, currency || undefined)}
+          </Text>
+        </View>
+      </View>
+
       <View style={styles.filterContainer}>
         <TouchableOpacity
-          style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
+          style={[stylesWithTheme.filterButton, filter === 'all' && stylesWithTheme.filterButtonActive]}
           onPress={() => setFilter('all')}
         >
           <Text
             style={[
-              styles.filterText,
-              filter === 'all' && styles.filterTextActive,
+              stylesWithTheme.filterText,
+              filter === 'all' && stylesWithTheme.filterTextActive,
             ]}
           >
             All
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, filter === 'low' && styles.filterButtonActive]}
+          style={[stylesWithTheme.filterButton, filter === 'low' && stylesWithTheme.filterButtonActive]}
           onPress={() => setFilter('low')}
         >
           <Text
             style={[
-              styles.filterText,
-              filter === 'low' && styles.filterTextActive,
+              stylesWithTheme.filterText,
+              filter === 'low' && stylesWithTheme.filterTextActive,
             ]}
           >
             Low Stock
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, filter === 'out' && styles.filterButtonActive]}
+          style={[stylesWithTheme.filterButton, filter === 'out' && stylesWithTheme.filterButtonActive]}
           onPress={() => setFilter('out')}
         >
           <Text
             style={[
-              styles.filterText,
-              filter === 'out' && styles.filterTextActive,
+              stylesWithTheme.filterText,
+              filter === 'out' && stylesWithTheme.filterTextActive,
             ]}
           >
             Out of Stock
           </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.actionButtonsContainer}>
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: colors.primary }]}
+          onPress={() => setNewProductModalVisible(true)}
+        >
+          <Text style={{ fontSize: 20, marginRight: 8 }}>➕</Text>
+          <Text style={styles.actionButtonText}>New Product</Text>
         </TouchableOpacity>
       </View>
 
@@ -184,15 +493,317 @@ export default function StockScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="archive-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No products found</Text>
+            <Text style={{ fontSize: 64, marginBottom: 16 }}>📦</Text>
+            <Text style={stylesWithTheme.emptyText}>No products found</Text>
           </View>
         }
       />
+
+      {/* Store Selection Modal */}
+      <Modal
+        visible={storeModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setStoreModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Select Shop</Text>
+              <TouchableOpacity onPress={() => setStoreModalVisible(false)}>
+                <Text style={{ fontSize: 24, color: colors.text }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              <TouchableOpacity
+                style={[
+                  styles.storeOption,
+                  {
+                    backgroundColor: selectedStoreId === null ? colors.primary : colors.background,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => {
+                  setSelectedStoreId(null);
+                  setStoreModalVisible(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.storeOptionText,
+                    {
+                      color: selectedStoreId === null ? '#fff' : colors.text,
+                      fontWeight: selectedStoreId === null ? '600' : '400',
+                    },
+                  ]}
+                >
+                  All Shops
+                </Text>
+              </TouchableOpacity>
+              {stores.map((store) => (
+                <TouchableOpacity
+                  key={store.id}
+                  style={[
+                    styles.storeOption,
+                    {
+                      backgroundColor: selectedStoreId === store.id ? colors.primary : colors.background,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  onPress={() => {
+                    setSelectedStoreId(store.id);
+                    setStoreModalVisible(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.storeOptionText,
+                      {
+                        color: selectedStoreId === store.id ? '#fff' : colors.text,
+                        fontWeight: selectedStoreId === store.id ? '600' : '400',
+                      },
+                    ]}
+                  >
+                    {store.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Stock Adjustment Modal */}
+      <Modal
+        visible={stockAdjustModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setStockAdjustModalVisible(false);
+          setSelectedProduct(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Adjust Stock</Text>
+              <TouchableOpacity onPress={() => {
+                setStockAdjustModalVisible(false);
+                setSelectedProduct(null);
+              }}>
+                <Text style={{ fontSize: 24, color: colors.text }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {selectedProduct ? (
+              <ScrollView showsVerticalScrollIndicator={true}>
+                <View style={[styles.productInfoSection, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.productInfoLabel, { color: colors.textSecondary }]}>Product:</Text>
+                  <Text style={[styles.productInfoValue, { color: colors.text }]}>{selectedProduct.name}</Text>
+                  <Text style={[styles.productInfoLabel, { color: colors.textSecondary }]}>Current Stock:</Text>
+                  <Text style={[styles.productInfoValue, { color: colors.text }]}>{selectedProduct.stock_quantity}</Text>
+                </View>
+
+                <View style={styles.inputSection}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Quantity *</Text>
+                  <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
+                    Enter positive number to add, negative to remove (e.g., +5 or -3)
+                  </Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    value={adjustQuantity}
+                    onChangeText={setAdjustQuantity}
+                    placeholder="e.g., 5 or -3"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={styles.inputSection}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Reason (Optional)</Text>
+                  <TextInput
+                    style={[styles.textArea, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    value={adjustReason}
+                    onChangeText={setAdjustReason}
+                    placeholder="Reason for adjustment..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                {adjustQuantity && !isNaN(parseInt(adjustQuantity)) && (
+                  <View style={[styles.previewSection, { backgroundColor: colors.background }]}>
+                    <Text style={[styles.previewLabel, { color: colors.textSecondary }]}>New Stock:</Text>
+                    <Text style={[styles.previewValue, { color: colors.text }]}>
+                      {selectedProduct.stock_quantity + parseInt(adjustQuantity)}
+                    </Text>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    { backgroundColor: colors.primary },
+                    (isAdjusting || !adjustQuantity || isNaN(parseInt(adjustQuantity))) && { opacity: 0.5 }
+                  ]}
+                  onPress={handleStockAdjustment}
+                  disabled={isAdjusting || !adjustQuantity || isNaN(parseInt(adjustQuantity))}
+                >
+                  <Text style={styles.submitButtonText}>
+                    {isAdjusting ? 'Adjusting...' : 'Adjust Stock'}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading product...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* New Product Modal */}
+      <Modal
+        visible={newProductModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNewProductModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.newProductModalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>New Product</Text>
+              <TouchableOpacity onPress={() => setNewProductModalVisible(false)}>
+                <Text style={{ fontSize: 24, color: colors.text }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScrollView}>
+              <View style={styles.inputSection}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Product Name *</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                  value={newProductName}
+                  onChangeText={setNewProductName}
+                  placeholder="Enter product name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              <View style={styles.inputSection}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>SKU *</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                  value={newProductSku}
+                  onChangeText={setNewProductSku}
+                  placeholder="Enter SKU"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              <View style={styles.inputSection}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Shop *</Text>
+                <View style={styles.storeSelectContainer}>
+                  {stores.map((store) => (
+                    <TouchableOpacity
+                      key={store.id}
+                      style={[
+                        styles.storeSelectButton,
+                        {
+                          backgroundColor: newProductStoreId === store.id ? colors.primary : colors.background,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                      onPress={() => setNewProductStoreId(store.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.storeSelectText,
+                          {
+                            color: newProductStoreId === store.id ? '#fff' : colors.text,
+                            fontWeight: newProductStoreId === store.id ? '600' : '400',
+                          },
+                        ]}
+                      >
+                        {store.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.rowInputs}>
+                <View style={[styles.inputSection, { flex: 1, marginRight: 8 }]}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Cost Price</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    value={newProductCostPrice}
+                    onChangeText={setNewProductCostPrice}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+
+                <View style={[styles.inputSection, { flex: 1, marginLeft: 8 }]}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Selling Price</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    value={newProductSellingPrice}
+                    onChangeText={setNewProductSellingPrice}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.rowInputs}>
+                <View style={[styles.inputSection, { flex: 1, marginRight: 8 }]}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Initial Stock</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    value={newProductStock}
+                    onChangeText={setNewProductStock}
+                    placeholder="0"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={[styles.inputSection, { flex: 1, marginLeft: 8 }]}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Min Stock Level</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                    value={newProductMinStock}
+                    onChangeText={setNewProductMinStock}
+                    placeholder="10"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: colors.success }]}
+                onPress={handleCreateProduct}
+                disabled={isCreating || !newProductName.trim() || !newProductSku.trim() || !newProductStoreId}
+              >
+                <Text style={styles.submitButtonText}>
+                  {isCreating ? 'Creating...' : 'Create Product'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -200,16 +811,68 @@ export default function StockScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  storeFilterContainer: {
+    padding: 16,
+    paddingBottom: 8,
+  },
+  storeFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  storeFilterText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  summaryContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingTop: 0,
+    paddingBottom: 8,
+    gap: 12,
+  },
+  summaryCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: '#fff',
+    opacity: 0.9,
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  summarySubtext: {
+    fontSize: 11,
+    color: '#fff',
+    opacity: 0.8,
+  },
   filterContainer: {
     flexDirection: 'row',
     padding: 16,
+    paddingTop: 8,
     paddingBottom: 8,
     gap: 8,
   },
@@ -218,19 +881,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
     alignItems: 'center',
   },
   filterButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    // Will be overridden by theme
   },
   filterText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
   },
   filterTextActive: {
     color: '#fff',
@@ -240,7 +899,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   stockCard: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -262,12 +920,10 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
   productSku: {
     fontSize: 12,
-    color: '#666',
   },
   statusBadge: {
     flexDirection: 'row',
@@ -276,6 +932,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+  },
+  statusSymbol: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   statusText: {
     fontSize: 12,
@@ -289,7 +949,6 @@ const styles = StyleSheet.create({
   },
   stockBarBackground: {
     height: 8,
-    backgroundColor: '#e0e0e0',
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -306,13 +965,11 @@ const styles = StyleSheet.create({
   },
   stockNumberLabel: {
     fontSize: 12,
-    color: '#666',
     marginBottom: 4,
   },
   stockNumberValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1a1a1a',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -321,7 +978,176 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#999',
     marginTop: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 0,
+    width: '100%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  storeOption: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  storeOptionText: {
+    fontSize: 16,
+  },
+  actionButtonsContainer: {
+    padding: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  productActions: {
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  tapHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  adjustModalContent: {
+    maxHeight: 600,
+  },
+  newProductModalContent: {
+    maxHeight: 700,
+  },
+  modalScrollView: {
+    maxHeight: 500,
+  },
+  modalScrollContent: {
+    paddingBottom: 20,
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  productInfoSection: {
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  productInfoLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+    fontWeight: '600',
+  },
+  productInfoValue: {
+    fontSize: 16,
+    marginBottom: 12,
+    fontWeight: '600',
+  },
+  inputSection: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  inputHint: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  textArea: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  rowInputs: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  previewSection: {
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  previewLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  previewValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  submitButton: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  storeSelectContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  storeSelectButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  storeSelectText: {
+    fontSize: 14,
   },
 });

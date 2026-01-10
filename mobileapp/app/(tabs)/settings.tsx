@@ -10,11 +10,12 @@ import {
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { Profile } from '@/lib/types';
+import { useTheme } from '@/lib/contexts/ThemeContext';
 import { getCurrentUserProfile } from '@/lib/utils';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 export default function SettingsScreen() {
+  const { colors, theme, themeMode, setThemeMode } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -53,63 +54,88 @@ export default function SettingsScreen() {
     subtitle,
     onPress,
     showArrow = true,
+    rightComponent,
   }: {
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: string;
     title: string;
     subtitle?: string;
     onPress: () => void;
     showArrow?: boolean;
+    rightComponent?: React.ReactNode;
   }) => (
-    <TouchableOpacity style={styles.settingItem} onPress={onPress}>
-      <View style={styles.settingIconContainer}>
-        <Ionicons name={icon} size={24} color="#007AFF" />
+    <TouchableOpacity style={[styles.settingItem, { backgroundColor: colors.surface, borderBottomColor: colors.border }]} onPress={onPress}>
+      <View style={[styles.settingIconContainer, { backgroundColor: colors.primary + '20' }]}>
+        <Text style={{ fontSize: 24 }}>{icon}</Text>
       </View>
       <View style={styles.settingContent}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+        <Text style={[styles.settingTitle, { color: colors.text }]}>{title}</Text>
+        {subtitle && <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>}
       </View>
-      {showArrow && (
-        <Ionicons name="chevron-forward" size={20} color="#999" />
-      )}
+      {rightComponent || (showArrow && (
+        <Text style={{ fontSize: 20, color: colors.textSecondary }}>›</Text>
+      ))}
     </TouchableOpacity>
   );
 
+  const handleThemeChange = () => {
+    const modes: Array<'light' | 'dark' | 'auto'> = ['light', 'dark', 'auto'];
+    const currentIndex = modes.indexOf(themeMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setThemeMode(modes[nextIndex]);
+  };
+
+  const getThemeLabel = () => {
+    switch (themeMode) {
+      case 'light':
+        return 'Light';
+      case 'dark':
+        return 'Dark';
+      case 'auto':
+        return 'Auto';
+    }
+  };
+
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.profileSection}>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={48} color="#007AFF" />
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.profileSection, { backgroundColor: colors.surface }]}>
+        <View style={[styles.avatarContainer, { backgroundColor: colors.primary + '20' }]}>
+          <Text style={{ fontSize: 48 }}>👤</Text>
         </View>
-        <Text style={styles.profileName}>
+        <Text style={[styles.profileName, { color: colors.text }]}>
           {profile?.full_name || 'Admin User'}
         </Text>
-        <Text style={styles.profileEmail}>{profile?.email}</Text>
-        <View style={styles.roleBadge}>
+        <Text style={[styles.profileEmail, { color: colors.textSecondary }]}>{profile?.email}</Text>
+        <View style={[styles.roleBadge, { backgroundColor: colors.primary }]}>
           <Text style={styles.roleText}>{profile?.role.toUpperCase()}</Text>
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Management</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Appearance</Text>
         <SettingItem
-          icon="people"
-          title="User Management"
-          subtitle="Manage users and permissions"
-          onPress={() => {
-            // Navigate to user management
-            Alert.alert('Coming Soon', 'User management screen will be available soon');
-          }}
+          icon={theme === 'dark' ? '🌙' : '☀️'}
+          title="Theme"
+          subtitle={`Current: ${getThemeLabel()}`}
+          onPress={handleThemeChange}
+          showArrow={false}
+          rightComponent={
+            <Text style={[styles.themeLabel, { color: colors.primary }]}>{getThemeLabel()}</Text>
+          }
         />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Management</Text>
         <SettingItem
-          icon="storefront"
+          icon="🏪"
           title="Store Management"
           subtitle="Manage stores and locations"
           onPress={() => {
@@ -117,7 +143,7 @@ export default function SettingsScreen() {
           }}
         />
         <SettingItem
-          icon="bar-chart"
+          icon="📊"
           title="Reports"
           subtitle="View detailed reports"
           onPress={() => {
@@ -127,9 +153,9 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>System</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>System</Text>
         <SettingItem
-          icon="information-circle"
+          icon="ℹ️"
           title="About"
           subtitle="App version 1.0.0"
           onPress={() => {
@@ -140,7 +166,7 @@ export default function SettingsScreen() {
           }}
         />
         <SettingItem
-          icon="log-out"
+          icon="🚪"
           title="Logout"
           subtitle="Sign out from your account"
           onPress={handleLogout}
@@ -154,7 +180,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   centerContainer: {
     flex: 1,
@@ -162,7 +187,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   profileSection: {
-    backgroundColor: '#fff',
     alignItems: 'center',
     paddingVertical: 32,
     marginBottom: 16,
@@ -171,7 +195,6 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: '#007AFF20',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -179,16 +202,13 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 12,
   },
   roleBadge: {
-    backgroundColor: '#007AFF',
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 16,
@@ -204,24 +224,20 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
     paddingHorizontal: 16,
     paddingVertical: 8,
     textTransform: 'uppercase',
   },
   settingItem: {
-    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   settingIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF20',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -232,11 +248,13 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 2,
   },
   settingSubtitle: {
     fontSize: 12,
-    color: '#666',
+  },
+  themeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

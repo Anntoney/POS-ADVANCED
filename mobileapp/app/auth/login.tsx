@@ -33,18 +33,33 @@ export default function LoginScreen() {
 
       if (error) throw error;
 
-      // Check if user is admin
+      // Check if user has valid role (admin, manager, or cashier)
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, is_active')
           .eq('id', user.id)
           .single();
 
-        if (profile?.role !== 'admin') {
+        if (!profile) {
           await supabase.auth.signOut();
-          Alert.alert('Access Denied', 'This app is for administrators only');
+          Alert.alert('Access Denied', 'User profile not found');
+          return;
+        }
+
+        // Check if user is active
+        if (!profile.is_active) {
+          await supabase.auth.signOut();
+          Alert.alert('Access Denied', 'Your account has been deactivated. Please contact administrator.');
+          return;
+        }
+
+        // Allow admin, manager, and cashier roles
+        const validRoles = ['admin', 'manager', 'cashier'];
+        if (!validRoles.includes(profile.role)) {
+          await supabase.auth.signOut();
+          Alert.alert('Access Denied', 'You do not have permission to access this app');
           return;
         }
       }

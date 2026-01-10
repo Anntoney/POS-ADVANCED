@@ -11,11 +11,14 @@ import {
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { Product } from '@/lib/types';
+import { useCurrency } from '@/lib/contexts/CurrencyContext';
+import { useTheme } from '@/lib/contexts/ThemeContext';
 import { formatCurrency } from '@/lib/utils';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 export default function ProductsScreen() {
+  const { currency } = useCurrency();
+  const { colors } = useTheme();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +72,7 @@ export default function ProductsScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.productCard}
+        style={[styles.productCard, { backgroundColor: colors.surface }]}
         onPress={() => {
           // Navigate to product detail/edit screen
           // router.push(`/products/${item.id}`);
@@ -77,21 +80,21 @@ export default function ProductsScreen() {
       >
         <View style={styles.productHeader}>
           <View style={styles.productInfo}>
-            <Text style={styles.productName}>{item.name}</Text>
+            <Text style={[styles.productName, { color: colors.text }]}>{item.name}</Text>
             {item.sku && (
-              <Text style={styles.productSku}>SKU: {item.sku}</Text>
+              <Text style={[styles.productSku, { color: colors.textSecondary }]}>SKU: {item.sku}</Text>
             )}
           </View>
           <View
             style={[
               styles.statusBadge,
-              { backgroundColor: item.is_active ? '#34C75920' : '#FF3B3020' },
+              { backgroundColor: item.is_active ? colors.success + '20' : colors.error + '20' },
             ]}
           >
             <Text
               style={[
                 styles.statusText,
-                { color: item.is_active ? '#34C759' : '#FF3B30' },
+                { color: item.is_active ? colors.success : colors.error },
               ]}
             >
               {item.is_active ? 'Active' : 'Inactive'}
@@ -101,29 +104,25 @@ export default function ProductsScreen() {
 
         <View style={styles.productDetails}>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Price:</Text>
-            <Text style={styles.detailValue}>
-              {formatCurrency(item.selling_price)}
+            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Price:</Text>
+            <Text style={[styles.detailValue, { color: colors.text }]}>
+              {formatCurrency(item.selling_price, currency || undefined)}
             </Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Stock:</Text>
+            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Stock:</Text>
             <View style={styles.stockContainer}>
               <Text
                 style={[
                   styles.detailValue,
-                  isLowStock && styles.lowStockText,
+                  { color: colors.text },
+                  isLowStock && { color: colors.error },
                 ]}
               >
                 {item.stock_quantity}
               </Text>
               {isLowStock && (
-                <Ionicons
-                  name="warning"
-                  size={16}
-                  color="#FF3B30"
-                  style={styles.warningIcon}
-                />
+                <Text style={[styles.warningIcon, { color: colors.error }]}>⚠️</Text>
               )}
             </View>
           </View>
@@ -134,31 +133,26 @@ export default function ProductsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.searchContainer}>
-        <Ionicons
-          name="search"
-          size={20}
-          color="#999"
-          style={styles.searchIcon}
-        />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.searchIcon, { color: colors.textSecondary }]}>🔍</Text>
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search products..."
+          placeholderTextColor={colors.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={20} color="#999" />
+            <Text style={{ fontSize: 20, color: colors.textSecondary }}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -169,12 +163,12 @@ export default function ProductsScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="cube-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No products found</Text>
+            <Text style={{ fontSize: 64, color: colors.textSecondary }}>📦</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No products found</Text>
           </View>
         }
       />
@@ -185,7 +179,6 @@ export default function ProductsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   centerContainer: {
     flex: 1,
@@ -195,28 +188,25 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     margin: 16,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
   },
   searchIcon: {
+    fontSize: 20,
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#1a1a1a',
   },
   listContent: {
     padding: 16,
     paddingTop: 0,
   },
   productCard: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -238,12 +228,10 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
   productSku: {
     fontSize: 12,
-    color: '#666',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -264,22 +252,18 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: '#666',
     marginRight: 4,
   },
   detailValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a1a1a',
   },
   stockContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  lowStockText: {
-    color: '#FF3B30',
-  },
   warningIcon: {
+    fontSize: 16,
     marginLeft: 4,
   },
   emptyContainer: {
@@ -289,7 +273,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#999',
     marginTop: 16,
   },
 });

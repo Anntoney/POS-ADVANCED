@@ -81,3 +81,16 @@ export interface Store {
   created_at: string
   updated_at: string
 }
+
+export interface CustomerPayment {
+  id: string
+  payment_number: string
+  customer_id: string
+  sale_id: string | null
+  amount: number
+  payment_method: string
+  payment_date: string
+  notes: string | null
+  created_by: string
+  created_at: string
+}

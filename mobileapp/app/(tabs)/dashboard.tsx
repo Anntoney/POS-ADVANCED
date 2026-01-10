@@ -8,8 +8,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { useCurrency } from '@/lib/contexts/CurrencyContext';
+import { useTheme } from '@/lib/contexts/ThemeContext';
 import { formatCurrency } from '@/lib/utils';
-import { Ionicons } from '@expo/vector-icons';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -20,6 +21,8 @@ interface DashboardStats {
 }
 
 export default function DashboardScreen() {
+  const { currency } = useCurrency();
+  const { colors } = useTheme();
   const [stats, setStats] = useState<DashboardStats>({
     totalRevenue: 0,
     totalProducts: 0,
@@ -89,8 +92,8 @@ export default function DashboardScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -103,61 +106,61 @@ export default function DashboardScreen() {
   }: {
     title: string;
     value: string | number;
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: string;
     color: string;
   }) => (
-    <View style={styles.statCard}>
+    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
       <View style={[styles.iconContainer, { backgroundColor: `${color}20` }]}>
-        <Ionicons name={icon} size={24} color={color} />
+        <Text style={{ fontSize: 24 }}>{icon}</Text>
       </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statTitle}>{title}</Text>
+      <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+      <Text style={[styles.statTitle, { color: colors.textSecondary }]}>{title}</Text>
     </View>
   );
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
       }
     >
       <View style={styles.content}>
-        <Text style={styles.header}>Overview</Text>
+        <Text style={[styles.header, { color: colors.text }]}>Overview</Text>
 
         <View style={styles.statsGrid}>
           <StatCard
             title="Total Revenue"
-            value={formatCurrency(stats.totalRevenue)}
-            icon="cash"
-            color="#34C759"
+            value={formatCurrency(stats.totalRevenue, currency || undefined)}
+            icon="💰"
+            color={colors.success}
           />
           <StatCard
             title="Total Products"
             value={stats.totalProducts}
-            icon="cube"
-            color="#007AFF"
+            icon="📦"
+            color={colors.primary}
           />
           <StatCard
             title="Total Customers"
             value={stats.totalCustomers}
-            icon="people"
-            color="#FF9500"
+            icon="👥"
+            color={colors.warning}
           />
           <StatCard
             title="Total Sales"
             value={stats.totalSales}
-            icon="cart"
+            icon="🛒"
             color="#AF52DE"
           />
         </View>
 
         {stats.lowStockItems > 0 && (
-          <View style={styles.alertCard}>
-            <Ionicons name="warning" size={24} color="#FF3B30" />
+          <View style={[styles.alertCard, { backgroundColor: colors.warning + '20', borderLeftColor: colors.warning }]}>
+            <Text style={{ fontSize: 24, marginRight: 12 }}>⚠️</Text>
             <View style={styles.alertContent}>
-              <Text style={styles.alertTitle}>Low Stock Alert</Text>
-              <Text style={styles.alertText}>
+              <Text style={[styles.alertTitle, { color: colors.text }]}>Low Stock Alert</Text>
+              <Text style={[styles.alertText, { color: colors.textSecondary }]}>
                 {stats.lowStockItems} product{stats.lowStockItems > 1 ? 's' : ''}{' '}
                 need restocking
               </Text>
@@ -172,7 +175,6 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   centerContainer: {
     flex: 1,
@@ -186,7 +188,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 20,
-    color: '#1a1a1a',
   },
   statsGrid: {
     flexDirection: 'row',
@@ -195,7 +196,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   statCard: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     width: '48%',
@@ -217,21 +217,17 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
   statTitle: {
     fontSize: 12,
-    color: '#666',
   },
   alertCard: {
-    backgroundColor: '#FFF3E0',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     borderLeftWidth: 4,
-    borderLeftColor: '#FF3B30',
   },
   alertContent: {
     marginLeft: 12,
@@ -240,11 +236,9 @@ const styles = StyleSheet.create({
   alertTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
   alertText: {
     fontSize: 14,
-    color: '#666',
   },
 });

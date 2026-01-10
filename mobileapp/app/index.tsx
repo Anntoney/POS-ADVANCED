@@ -80,7 +80,7 @@ export default function Index() {
     try {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, is_active')
         .eq('id', session.user.id)
         .single();
 
@@ -90,7 +90,9 @@ export default function Index() {
         return;
       }
 
-      if (profile?.role === 'admin') {
+      // Allow admin, manager, and cashier roles
+      const validRoles = ['admin', 'manager', 'cashier'];
+      if (profile && validRoles.includes(profile.role) && profile.is_active) {
         router.replace('/(tabs)/dashboard');
       } else {
         await supabase.auth.signOut();
