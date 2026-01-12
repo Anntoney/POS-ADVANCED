@@ -54,20 +54,21 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="px-3 py-2">
+    <div className="px-3 py-2" suppressHydrationWarning>
       <div className="flex items-center gap-3 text-base font-medium text-muted-foreground mb-2 px-1">
         Theme
       </div>
-      <Select value={theme || "system"} onValueChange={(value) => setTheme(value)}>
-        <SelectTrigger className="w-full">
-          <div className="flex items-center gap-2">
-            {getThemeIcon()}
-            <SelectValue placeholder="Select theme">
-              {getThemeLabel()}
-            </SelectValue>
-          </div>
-        </SelectTrigger>
-        <SelectContent>
+      <div suppressHydrationWarning>
+        <Select value={theme || "system"} onValueChange={(value) => setTheme(value)}>
+          <SelectTrigger className="w-full">
+            <div className="flex items-center gap-2">
+              {getThemeIcon()}
+              <SelectValue placeholder="Select theme">
+                {getThemeLabel()}
+              </SelectValue>
+            </div>
+          </SelectTrigger>
+          <SelectContent>
           <SelectItem value="light">
             <div className="flex items-center gap-2">
               <Sun className="h-4 w-4" />
@@ -86,8 +87,9 @@ export function ThemeToggle() {
               <span>System</span>
             </div>
           </SelectItem>
-        </SelectContent>
-      </Select>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 }
