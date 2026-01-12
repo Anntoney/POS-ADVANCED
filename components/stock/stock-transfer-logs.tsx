@@ -95,7 +95,12 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
 
       // Verify source store has enough stock
       if (sourceProduct.stock_quantity < transfer.quantity) {
-        throw new Error(`Insufficient stock. Available: ${sourceProduct.stock_quantity}, Required: ${transfer.quantity}`)
+        const errorMsg = `Cannot complete transfer: Insufficient stock.\n\n` +
+          `Available: ${sourceProduct.stock_quantity} units\n` +
+          `Required: ${transfer.quantity} units\n\n` +
+          `The stock may have been sold or used in another transfer since this transfer was created.\n\n` +
+          `Please cancel this transfer or contact the source store to restock.`
+        throw new Error(errorMsg)
       }
 
       // Check if product exists in destination store (by name or SKU)
