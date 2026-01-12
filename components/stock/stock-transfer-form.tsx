@@ -260,6 +260,9 @@ export function StockTransferForm({
                     ))}
                 </SelectContent>
               </Select>
+              {!canAccessAllStores && activeStores.length === 2 && (
+                <p className="text-xs text-muted-foreground">Transferring to the other store</p>
+              )}
             </div>
           </div>
 
