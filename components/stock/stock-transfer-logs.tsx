@@ -71,12 +71,176 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
 
     try {
       const supabase = createClient()
-      const { error } = await supabase
+
+      // First, fetch the transfer details
+      const { data: transfer, error: fetchError } = await supabase
+        .from("stock_transfers")
+        .select("*")
+        .eq("id", transferId)
+        .single()
+
+      if (fetchError) throw fetchError
+      if (!transfer) throw new Error("Transfer not found")
+
+      // Fetch the source product from the source store
+      const { data: sourceProduct, error: productError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", transfer.product_id)
+        .eq("store_id", transfer.from_store_id)
+        .single()
+
+      if (productError) throw productError
+      if (!sourceProduct) throw new Error("Source product not found in source store")
+
+      // Verify source store has enough stock
+      if (sourceProduct.stock_quantity < transfer.quantity) {
+        throw new Error(`Insufficient stock. Available: ${sourceProduct.stock_quantity}, Required: ${transfer.quantity}`)
+      }
+
+      // Check if product exists in destination store (by name or SKU)
+      // First check by name
+      const { data: productsByName } = await supabase
+        .from("products")
+        .select("id, name, sku, stock_quantity")
+        .eq("store_id", transfer.to_store_id)
+        .eq("name", sourceProduct.name)
+
+      // Then check by SKU
+      const { data: productsBySku } = await supabase
+        .from("products")
+        .select("id, name, sku, stock_quantity")
+        .eq("store_id", transfer.to_store_id)
+        .eq("sku", sourceProduct.sku)
+
+      // Combine results, preferring name match
+      const existingProducts = productsByName && productsByName.length > 0 
+        ? productsByName 
+        : (productsBySku && productsBySku.length > 0 ? productsBySku : [])
+
+      let destinationProductId: string
+
+      if (existingProducts && existingProducts.length > 0) {
+        // Product exists in destination store - update quantity
+        // Prefer matching by name, then by SKU
+        const existingProduct = existingProducts.find((p: any) => p.name === sourceProduct.name) || existingProducts[0]
+        destinationProductId = existingProduct.id
+
+        const { error: updateError } = await supabase
+          .from("products")
+          .update({
+            stock_quantity: (existingProduct.stock_quantity || 0) + transfer.quantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingProduct.id)
+          .eq("store_id", transfer.to_store_id)
+
+        if (updateError) throw updateError
+      } else {
+        // Product doesn't exist in destination store - create it
+        // Generate unique SKU if needed
+        let newSku = sourceProduct.sku
+        const { data: skuCheck } = await supabase
+          .from("products")
+          .select("id")
+          .eq("sku", newSku)
+          .single()
+
+        if (skuCheck) {
+          // SKU already exists globally, generate a unique one
+          newSku = `${sourceProduct.sku}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        }
+
+        // Generate unique barcode if needed
+        let newBarcode = sourceProduct.barcode
+        if (newBarcode) {
+          const { data: barcodeCheck } = await supabase
+            .from("products")
+            .select("id")
+            .eq("barcode", newBarcode)
+            .single()
+
+          if (barcodeCheck) {
+            newBarcode = null // Set to null if duplicate
+          }
+        }
+
+        // Create new product in destination store
+        const { data: newProduct, error: insertError } = await supabase
+          .from("products")
+          .insert({
+            name: sourceProduct.name,
+            sku: newSku,
+            barcode: newBarcode,
+            category_id: sourceProduct.category_id,
+            unit_id: sourceProduct.unit_id,
+            description: sourceProduct.description,
+            cost_price: sourceProduct.cost_price,
+            selling_price: sourceProduct.selling_price,
+            stock_quantity: transfer.quantity,
+            min_stock_level: sourceProduct.min_stock_level,
+            tax_rate: sourceProduct.tax_rate,
+            is_active: sourceProduct.is_active,
+            created_by: sourceProduct.created_by,
+            store_id: transfer.to_store_id,
+          })
+          .select("id")
+          .single()
+
+        if (insertError) {
+          // If still duplicate key error, try with completely unique SKU
+          if (insertError.message?.includes("sku") || insertError.message?.includes("duplicate") || insertError.message?.includes("unique")) {
+            const uniqueSku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+            const { data: retryProduct, error: retryError } = await supabase
+              .from("products")
+              .insert({
+                name: sourceProduct.name,
+                sku: uniqueSku,
+                barcode: null, // Set barcode to null to avoid conflicts
+                category_id: sourceProduct.category_id,
+                unit_id: sourceProduct.unit_id,
+                description: sourceProduct.description,
+                cost_price: sourceProduct.cost_price,
+                selling_price: sourceProduct.selling_price,
+                stock_quantity: transfer.quantity,
+                min_stock_level: sourceProduct.min_stock_level,
+                tax_rate: sourceProduct.tax_rate,
+                is_active: sourceProduct.is_active,
+                created_by: sourceProduct.created_by,
+                store_id: transfer.to_store_id,
+              })
+              .select("id")
+              .single()
+
+            if (retryError) throw retryError
+            destinationProductId = retryProduct.id
+          } else {
+            throw insertError
+          }
+        } else {
+          destinationProductId = newProduct.id
+        }
+      }
+
+      // Deduct stock from source store
+      const { error: deductError } = await supabase
+        .from("products")
+        .update({
+          stock_quantity: sourceProduct.stock_quantity - transfer.quantity,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", sourceProduct.id)
+        .eq("store_id", transfer.from_store_id)
+
+      if (deductError) throw deductError
+
+      // Update transfer status to completed
+      const { error: statusError } = await supabase
         .from("stock_transfers")
         .update({ status: "completed", updated_at: new Date().toISOString() })
         .eq("id", transferId)
 
-      if (error) throw error
+      if (statusError) throw statusError
 
       // Mark related notifications as read
       await supabase
@@ -87,9 +251,10 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
 
       await loadTransfers()
       router.refresh()
-      alert("Transfer completed successfully!")
+      alert("Transfer completed successfully! Stock has been moved between stores.")
     } catch (error: any) {
-      alert(`Error completing transfer: ${error.message}`)
+      console.error("Error completing transfer:", error)
+      alert(`Error completing transfer: ${error.message || "An unexpected error occurred"}`)
     }
   }
 
