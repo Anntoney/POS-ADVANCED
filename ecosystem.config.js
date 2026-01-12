@@ -2,10 +2,10 @@ module.exports = {
   apps: [
     {
       name: 'pos-advanced',
-      script: 'npm',
-      args: 'run start',
+      script: 'node_modules/.bin/next',
+      args: 'start',
       cwd: 'C:\\Users\\Administrator\\Documents\\pos\\POS-ADVANCED',
-      interpreter: 'none',
+      interpreter: 'node',
       env: {
         NODE_ENV: 'production',
         PORT: 3000,

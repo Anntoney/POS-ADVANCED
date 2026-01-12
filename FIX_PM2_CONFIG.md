@@ -25,10 +25,16 @@ pm2 delete pos-advanced
 pm2 start ecosystem.config.js
 ```
 
-**Option B: Direct Command (Alternative)**
+**Option B: Direct Command (Alternative - Most Reliable on Windows)**
 ```powershell
-# Start PM2 with npm run start
+# Start PM2 with npm run start using cmd
 pm2 start npm --name "pos-advanced" -- run start
+```
+
+**Option C: Direct Next.js Command (Alternative)**
+```powershell
+# Start PM2 with Next.js directly
+pm2 start node_modules\.bin\next --name "pos-advanced" -- start
 ```
 
 **Option C: Using npx (Alternative)**
