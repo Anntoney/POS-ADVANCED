@@ -23,7 +23,7 @@ export default async function StockTransfersPage() {
     <PermissionGuard feature="stock_transfer">
       <div>
         <Header title="Stock Transfer Logs" />
-        <div className="p-6">
+        <div className="p-6" suppressHydrationWarning>
           <StockTransferLogs userId={user.id} isAdmin={isAdmin || false} />
         </div>
       </div>
