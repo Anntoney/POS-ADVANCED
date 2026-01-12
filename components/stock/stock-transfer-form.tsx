@@ -193,13 +193,6 @@ export function StockTransferForm({
     }
   }
 
-  const activeStores = stores.filter((s) => s.is_active)
-  
-  // Filter stores for "from store" - users can only select their own store unless admin
-  const availableFromStores = canAccessAllStores 
-    ? activeStores 
-    : activeStores.filter((s) => s.id === userStoreId)
-
   return (
     <Card>
       <CardHeader>
