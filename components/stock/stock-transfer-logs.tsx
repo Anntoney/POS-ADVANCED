@@ -32,20 +32,12 @@ export function StockTransferLogs({
 }) {
   const [transfers, setTransfers] = useState<StockTransferWithRelations[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [userStoreId, setUserStoreId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const router = useRouter()
 
   useEffect(() => {
-    loadUserStore()
     loadTransfers()
   }, [])
-
-  const loadUserStore = async () => {
-    const supabase = createClient()
-    const { data: profile } = await supabase.from("profiles").select("store_id").eq("id", userId).single()
-    setUserStoreId(profile?.store_id || null)
-  }
 
   const loadTransfers = async () => {
     setIsLoading(true)
