@@ -290,6 +290,29 @@ export function StockTransferLogs({
     }
   }
 
+  const handleDeleteTransfer = async (transferId: string) => {
+    if (!confirm("Are you sure you want to delete this transfer log? This action cannot be undone.")) {
+      return
+    }
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("stock_transfers")
+        .delete()
+        .eq("id", transferId)
+
+      if (error) throw error
+
+      await loadTransfers()
+      router.refresh()
+      alert("Transfer log deleted successfully")
+    } catch (error: any) {
+      console.error("Error deleting transfer:", error)
+      alert(`Error deleting transfer: ${error.message || "An unexpected error occurred"}`)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
