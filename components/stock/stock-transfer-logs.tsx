@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { Check, X, Package, RefreshCw, Plus } from "lucide-react"
+import { Check, X, Package, RefreshCw, Plus, Search } from "lucide-react"
 import Link from "next/link"
+import { Input } from "@/components/ui/input"
 import type { StockTransfer, Store, Product } from "@/lib/types/database"
 
 type StockTransferWithRelations = StockTransfer & {
@@ -22,6 +23,7 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
   const [transfers, setTransfers] = useState<StockTransferWithRelations[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [userStoreId, setUserStoreId] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -123,6 +125,27 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
     }
   }
 
+  // Filter transfers based on search term
+  const filteredTransfers = transfers.filter((transfer) => {
+    if (!searchTerm.trim()) return true
+    const searchLower = searchTerm.toLowerCase()
+    const productName = ((transfer.products as any)?.name || "").toLowerCase()
+    const productSku = ((transfer.products as any)?.sku || "").toLowerCase()
+    const transferNumber = (transfer.transfer_number || "").toLowerCase()
+    const fromStoreName = ((transfer.from_store as any)?.name || "").toLowerCase()
+    const toStoreName = ((transfer.to_store as any)?.name || "").toLowerCase()
+    const createdBy = (transfer.profiles?.full_name || transfer.profiles?.email || "").toLowerCase()
+
+    return (
+      productName.includes(searchLower) ||
+      productSku.includes(searchLower) ||
+      transferNumber.includes(searchLower) ||
+      fromStoreName.includes(searchLower) ||
+      toStoreName.includes(searchLower) ||
+      createdBy.includes(searchLower)
+    )
+  })
+
   if (isLoading) {
     return <div className="text-center py-8">Loading transfer logs...</div>
   }
@@ -153,8 +176,30 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
         </div>
       </CardHeader>
       <CardContent>
+        {/* Search Input */}
+        <div className="mb-4">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by product name, SKU, transfer #, store, or creator..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {searchTerm && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Showing {filteredTransfers.length} of {transfers.length} transfers
+            </p>
+          )}
+        </div>
+
         {transfers.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">No stock transfers found</div>
+        ) : filteredTransfers.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No transfers found matching "{searchTerm}"
+          </div>
         ) : (
           <div className="rounded-md border">
             <Table>
@@ -172,7 +217,7 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transfers.map((transfer) => (
+                {filteredTransfers.map((transfer) => (
                   <TableRow key={transfer.id}>
                     <TableCell className="font-medium">{transfer.transfer_number}</TableCell>
                     <TableCell>{(transfer.from_store as any)?.name || "—"}</TableCell>
