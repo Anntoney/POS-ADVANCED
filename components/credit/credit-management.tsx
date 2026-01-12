@@ -22,7 +22,24 @@ import { useRouter } from "next/navigation"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
 import type { Customer } from "@/lib/types/database"
 
-export function CreditManagement({ customers }: { customers: Customer[] }) {
+type CustomerWithStore = Customer & {
+  stores?: { id: string; name: string } | null
+}
+
+type Store = {
+  id: string
+  name: string
+}
+
+export function CreditManagement({ 
+  customers, 
+  canAccessAllStores = false,
+  stores = []
+}: { 
+  customers: CustomerWithStore[]
+  canAccessAllStores?: boolean
+  stores?: Store[]
+}) {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [paymentAmount, setPaymentAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("cash")
@@ -37,6 +54,16 @@ export function CreditManagement({ customers }: { customers: Customer[] }) {
   }, [])
 
   const customersWithDebt = customers.filter((c) => Number(c.balance) > 0)
+  
+  // Helper to get store name
+  const getStoreName = (customer: CustomerWithStore) => {
+    if (customer.stores) return customer.stores.name
+    if (customer.store_id) {
+      const store = stores.find(s => s.id === customer.store_id)
+      return store?.name || "Unknown Store"
+    }
+    return "No Store"
+  }
 
   const handlePayment = async () => {
     if (!selectedCustomer) return
@@ -135,23 +162,6 @@ export function CreditManagement({ customers }: { customers: Customer[] }) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Credit Limit</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {currency
-                ? formatCurrency(
-                    customers.reduce((sum, c) => sum + Number(c.credit_limit), 0),
-                    currency,
-                  )
-                : `$${customers.reduce((sum, c) => sum + Number(c.credit_limit), 0).toFixed(2)}`}
-            </div>
-            <p className="text-xs text-muted-foreground">total available credit</p>
-          </CardContent>
-        </Card>
       </div>
 
       <Card>
@@ -168,18 +178,14 @@ export function CreditManagement({ customers }: { customers: Customer[] }) {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Contact</TableHead>
+                  {canAccessAllStores && <TableHead>Store</TableHead>}
                   <TableHead>Current Balance</TableHead>
-                  <TableHead>Credit Limit</TableHead>
-                  <TableHead>Available Credit</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {customersWithDebt.map((customer) => {
                   const balance = Number(customer.balance)
-                  const creditLimit = Number(customer.credit_limit)
-                  const available = creditLimit - balance
-                  const utilizationPercent = (balance / creditLimit) * 100
 
                   return (
                     <TableRow key={customer.id}>
@@ -190,30 +196,14 @@ export function CreditManagement({ customers }: { customers: Customer[] }) {
                           <div className="text-muted-foreground">{customer.phone || "-"}</div>
                         </div>
                       </TableCell>
+                      {canAccessAllStores && (
+                        <TableCell>
+                          <Badge variant="outline">{getStoreName(customer)}</Badge>
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="font-semibold text-red-600">
                           {currency ? formatCurrency(balance, currency) : `$${balance.toFixed(2)}`}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {currency ? formatCurrency(creditLimit, currency) : `$${creditLimit.toFixed(2)}`}
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="font-medium text-green-600">
-                            {currency ? formatCurrency(available, currency) : `$${available.toFixed(2)}`}
-                          </div>
-                          <Badge
-                            variant={
-                              utilizationPercent > 90
-                                ? "destructive"
-                                : utilizationPercent > 70
-                                  ? "secondary"
-                                  : "outline"
-                            }
-                          >
-                            {utilizationPercent.toFixed(0)}% used
-                          </Badge>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">

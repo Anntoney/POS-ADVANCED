@@ -49,7 +49,6 @@ export interface Customer {
   address: string | null
   city: string | null
   country: string | null
-  credit_limit: number
   balance: number
   store_id: string | null
   created_by: string | null

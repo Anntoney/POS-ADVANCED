@@ -104,14 +104,181 @@ export function SalesReport() {
       if (paymentsError) throw paymentsError
 
       // Fetch credit payments (customer_payments) made in the date range
-      // These are payments toward existing credit balances
-      const { data: creditPayments, error: creditPaymentsError } = await supabase
-        .from("customer_payments")
-        .select("payment_method, amount, payment_date")
-        .gte("payment_date", `${startDate}T00:00:00`)
-        .lte("payment_date", `${endDate}T23:59:59`)
+      // First get customer IDs based on store filter if needed
+      let customerIdsForStore: string[] | null = null
+      if (storeFilter !== "all") {
+        const { data: customersInStore, error: customersError } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("store_id", storeFilter)
+        
+        if (customersError) throw customersError
+        customerIdsForStore = customersInStore?.map(c => c.id) || []
+      }
 
-      if (creditPaymentsError) throw creditPaymentsError
+      // Fetch credit payments - filter by customer IDs if store filter is set
+      let creditPayments: any[] = []
+      
+      if (customerIdsForStore === null || (customerIdsForStore && customerIdsForStore.length > 0)) {
+        let creditPaymentsQuery = supabase
+          .from("customer_payments")
+          .select("payment_method, amount, payment_date, customer_id")
+          .gte("payment_date", `${startDate}T00:00:00`)
+          .lte("payment_date", `${endDate}T23:59:59`)
+
+        // Filter by store via customers if store filter is set
+        if (customerIdsForStore !== null && customerIdsForStore.length > 0) {
+          creditPaymentsQuery = creditPaymentsQuery.in("customer_id", customerIdsForStore)
+        }
+
+        const { data: creditPaymentsData, error: creditPaymentsError } = await creditPaymentsQuery
+        if (creditPaymentsError) throw creditPaymentsError
+        creditPayments = creditPaymentsData || []
+      }
+
+      // Extract customer IDs from credit payments
+      const customerIdsWithPayments = [...new Set(creditPayments?.map((p: any) => p.customer_id).filter(Boolean) || [])]
+      
+      // Fetch all credit sales for these customers (including sales from any date)
+      let clearedCreditSales: any[] = []
+      let clearedCreditSaleItems: any[] = []
+      
+      if (customerIdsWithPayments.length > 0) {
+        // Get all credit sales for customers who made payments in the date range
+        let creditSalesQuery = supabase
+          .from("sales")
+          .select("id, customer_id, sale_date, total_amount, amount_paid, payment_status, store_id")
+          .in("customer_id", customerIdsWithPayments)
+          .in("payment_status", ["pending", "partial"])
+
+        if (storeFilter !== "all") {
+          creditSalesQuery = creditSalesQuery.eq("store_id", storeFilter)
+        }
+
+        const { data: allCreditSales, error: creditSalesError } = await creditSalesQuery
+        if (creditSalesError) throw creditSalesError
+
+        // For each customer, track payments chronologically to find which sales were cleared
+        if (allCreditSales && allCreditSales.length > 0) {
+          // Get all customer payments for these customers - before start date and up to end date
+          // Filter by store via customer IDs if store filter is set
+          let paymentsBeforeQuery = supabase
+            .from("customer_payments")
+            .select("customer_id, amount")
+            .in("customer_id", customerIdsWithPayments)
+            .lt("payment_date", `${startDate}T00:00:00`)
+
+          if (customerIdsForStore !== null && customerIdsForStore.length > 0) {
+            paymentsBeforeQuery = paymentsBeforeQuery.in("customer_id", customerIdsForStore)
+          }
+
+          const { data: paymentsBeforeStart, error: paymentsBeforeError } = await paymentsBeforeQuery
+
+          if (paymentsBeforeError) throw paymentsBeforeError
+
+          let paymentsUpToEndQuery = supabase
+            .from("customer_payments")
+            .select("customer_id, amount")
+            .in("customer_id", customerIdsWithPayments)
+            .lte("payment_date", `${endDate}T23:59:59`)
+
+          if (customerIdsForStore !== null && customerIdsForStore.length > 0) {
+            paymentsUpToEndQuery = paymentsUpToEndQuery.in("customer_id", customerIdsForStore)
+          }
+
+          const { data: paymentsUpToEnd, error: paymentsUpToEndError } = await paymentsUpToEndQuery
+
+          if (paymentsUpToEndError) throw paymentsUpToEndError
+
+          // Calculate total payments per customer before start and up to end
+          const paymentsBeforeByCustomer = new Map<string, number>()
+          paymentsBeforeStart?.forEach(payment => {
+            const customerId = payment.customer_id
+            const current = paymentsBeforeByCustomer.get(customerId) || 0
+            paymentsBeforeByCustomer.set(customerId, current + Number(payment.amount))
+          })
+
+          const paymentsUpToEndByCustomer = new Map<string, number>()
+          paymentsUpToEnd?.forEach(payment => {
+            const customerId = payment.customer_id
+            const current = paymentsUpToEndByCustomer.get(customerId) || 0
+            paymentsUpToEndByCustomer.set(customerId, current + Number(payment.amount))
+          })
+
+          // Group credit sales by customer and sort by date (oldest first - FIFO)
+          const creditSalesByCustomer = new Map<string, Array<any>>()
+          allCreditSales.forEach(sale => {
+            const customerId = sale.customer_id
+            if (!creditSalesByCustomer.has(customerId)) {
+              creditSalesByCustomer.set(customerId, [])
+            }
+            creditSalesByCustomer.get(customerId)!.push(sale)
+          })
+
+          creditSalesByCustomer.forEach((customerCreditSales, customerId) => {
+            // Sort sales by date (oldest first) - FIFO principle
+            customerCreditSales.sort((a, b) => 
+              new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime()
+            )
+
+            const totalPaymentsBefore = paymentsBeforeByCustomer.get(customerId) || 0
+            const totalPaymentsUpToEnd = paymentsUpToEndByCustomer.get(customerId) || 0
+
+            // Apply payments to sales in order (FIFO - First In First Out)
+            let paymentsUsedBeforeStart = 0
+            let paymentsUsedUpToEnd = 0
+
+            for (const sale of customerCreditSales) {
+              const saleTotal = Number(sale.total_amount)
+              const initialPaid = Number(sale.amount_paid || 0)
+              const remainingNeeded = saleTotal - initialPaid
+
+              // Calculate how much was paid to this sale before start date
+              const paymentsRemainingBeforeStart = totalPaymentsBefore - paymentsUsedBeforeStart
+              const paidToSaleBeforeStart = Math.min(remainingNeeded, paymentsRemainingBeforeStart)
+              const salePaidBeforeStart = initialPaid + paidToSaleBeforeStart
+
+              // Calculate how much is paid to this sale up to end date
+              const paymentsRemainingUpToEnd = totalPaymentsUpToEnd - paymentsUsedUpToEnd
+              const paidToSaleUpToEnd = Math.min(remainingNeeded, paymentsRemainingUpToEnd)
+              const salePaidUpToEnd = initialPaid + paidToSaleUpToEnd
+
+              // Sale was cleared during date range if:
+              // 1. It wasn't fully paid before start date
+              // 2. It IS fully paid up to end date
+              const wasNotClearedBefore = salePaidBeforeStart < saleTotal
+              const wasClearedByEnd = salePaidUpToEnd >= saleTotal
+
+              if (wasNotClearedBefore && wasClearedByEnd && !clearedCreditSales.find(s => s.id === sale.id)) {
+                clearedCreditSales.push(sale)
+              }
+
+              // Update payments used for next sale (payments are applied in FIFO order)
+              if (wasClearedByEnd) {
+                // Sale was fully paid, so all remaining needed was used
+                paymentsUsedBeforeStart += paidToSaleBeforeStart
+                paymentsUsedUpToEnd += remainingNeeded
+              } else {
+                // Sale not fully paid, so only what was applied was used
+                paymentsUsedBeforeStart += paidToSaleBeforeStart
+                paymentsUsedUpToEnd += paidToSaleUpToEnd
+              }
+            }
+          })
+
+          // Fetch sale items for cleared credit sales
+          if (clearedCreditSales.length > 0) {
+            const clearedSaleIds = clearedCreditSales.map(s => s.id)
+            const { data: clearedItems, error: clearedItemsError } = await supabase
+              .from("sale_items")
+              .select("sale_id, product_id, product_name, quantity, total_amount, unit_price")
+              .in("sale_id", clearedSaleIds)
+
+            if (clearedItemsError) throw clearedItemsError
+            clearedCreditSaleItems = clearedItems || []
+          }
+        }
+      }
 
       // Fetch expenses in the date range
       let expensesQuery = supabase
@@ -186,7 +353,7 @@ export function SalesReport() {
       const productMap = new Map<string, SalesReportData>()
       const paymentMap = new Map<string, number>()
 
-      // Group by product - only for fully paid sales
+      // Group by product - for fully paid sales
       saleItems?.forEach((item) => {
         const sale = paidSales.find((s) => s.id === item.sale_id)
         if (!sale) return // Skip items from unpaid credit sales
@@ -208,30 +375,57 @@ export function SalesReport() {
         }
       })
 
+      // Also group by product for cleared credit sales
+      clearedCreditSaleItems?.forEach((item) => {
+        const key = item.product_id || item.product_name
+        const existing = productMap.get(key)
+
+        if (existing) {
+          existing.total_quantity += item.quantity
+          existing.total_amount += Number(item.total_amount)
+        } else {
+          productMap.set(key, {
+            product_name: item.product_name,
+            product_id: item.product_id || "",
+            total_quantity: item.quantity,
+            total_amount: Number(item.total_amount),
+            payment_methods: [],
+          })
+        }
+      })
+
       // Build payment summaries from paid sales only (exclude unpaid credit sales)
+      // This is for normal sales only, not credit payments
+      const normalSalesPaymentMap = new Map<string, number>()
       salePayments
         ?.filter((p) => filteredSaleIds.includes(p.sale_id))
         .forEach((p) => {
-          const currentTotal = paymentMap.get(p.payment_method) || 0
-          paymentMap.set(p.payment_method, currentTotal + Number(p.amount))
+          const currentTotal = normalSalesPaymentMap.get(p.payment_method) || 0
+          normalSalesPaymentMap.set(p.payment_method, currentTotal + Number(p.amount))
         })
 
-      // Add credit payments (debt clearance) - count under their payment method AND separately
+      // Process credit payments (debt clearance) separately
+      // Group them by payment method used
+      const creditPaymentsByMethod = new Map<string, number>()
       let totalCreditPayments = 0
       creditPayments?.forEach((cp) => {
         const method = cp.payment_method || "cash"
-        // Add to the payment method used (cash, mobile_money, etc.)
-        const currentTotal = paymentMap.get(method) || 0
-        paymentMap.set(method, currentTotal + Number(cp.amount))
-        
-        // Also track total for separate "Credit Payments" line item
+        const currentTotal = creditPaymentsByMethod.get(method) || 0
+        creditPaymentsByMethod.set(method, currentTotal + Number(cp.amount))
         totalCreditPayments += Number(cp.amount)
       })
 
-      // Add separate line for credit payments/debt clearance if any
-      if (totalCreditPayments > 0) {
-        paymentMap.set("debt_clearance", totalCreditPayments)
-      }
+      // Add normal sales payments to the payment map
+      normalSalesPaymentMap.forEach((total, method) => {
+        paymentMap.set(method, total)
+      })
+
+      // Add credit payments separately - show each method used for credit payments
+      creditPaymentsByMethod.forEach((total, method) => {
+        // Store with prefix to identify as credit payment
+        const creditMethodKey = `credit_${method}`
+        paymentMap.set(creditMethodKey, total)
+      })
 
       // Add payment methods to each product (for display purposes only)
       productMap.forEach((product) => {
@@ -250,13 +444,33 @@ export function SalesReport() {
 
       // Calculate totals from fully paid sales only (exclude unpaid credit sales)
       const filteredSales = paidSales.filter((s) => filteredSaleIds.includes(s.id))
-      const salesTotal = filteredSales.reduce((sum, sale) => sum + Number(sale.total_amount), 0)
+      const normalSalesTotal = filteredSales.reduce((sum, sale) => sum + Number(sale.total_amount), 0)
       
+      // Total Sales = Normal Sales + Credit Payments
+      const salesTotal = normalSalesTotal + totalCreditPayments
+      
+      // Get product IDs from cleared credit sale items to fetch cost prices if not already fetched
+      const clearedProductIds = [...new Set(clearedCreditSaleItems?.map(item => item.product_id).filter(Boolean) || [])]
+      const newProductIds = clearedProductIds.filter(id => !productIds.includes(id))
+      
+      if (newProductIds.length > 0) {
+        const { data: newProducts, error: newProductsError } = await supabase
+          .from("products")
+          .select("id, cost_price")
+          .in("id", newProductIds)
+        
+        if (newProductsError) throw newProductsError
+        newProducts?.forEach(product => {
+          costPriceMap.set(product.id, Number(product.cost_price || 0))
+        })
+      }
+
       // Calculate gross profit: (selling_price - cost_price) * quantity for each item
-      // Only include items from fully paid sales (already filtered in productMap)
+      // Include items from fully paid sales AND cleared credit sales
       let grossTotal = 0
+      
+      // Gross profit from paid sales
       saleItems?.forEach((item) => {
-        // Only calculate profit for items from paid sales
         if (item.product_id && filteredSaleIds.includes(item.sale_id)) {
           const costPrice = costPriceMap.get(item.product_id) || 0
           const sellingPrice = Number(item.unit_price || 0)
@@ -266,10 +480,16 @@ export function SalesReport() {
         }
       })
       
-      // Calculate total amount actually paid from payments (excluding debt_clearance as it's already counted in payment methods)
-      const totalPaidFromPayments = Array.from(paymentMap.entries())
-        .filter(([method]) => method !== "debt_clearance")
-        .reduce((sum, [, amount]) => sum + amount, 0)
+      // Gross profit from cleared credit sales
+      clearedCreditSaleItems?.forEach((item) => {
+        if (item.product_id) {
+          const costPrice = costPriceMap.get(item.product_id) || 0
+          const sellingPrice = Number(item.unit_price || 0)
+          const quantity = item.quantity
+          const profit = (sellingPrice - costPrice) * quantity
+          grossTotal += profit
+        }
+      })
 
       setReportData(Array.from(productMap.values()))
       setPaymentSummaries(
@@ -409,7 +629,7 @@ export function SalesReport() {
                 <div className="text-2xl font-bold">
                   {currency ? formatCurrency(totalSales, currency) : `$${totalSales.toFixed(2)}`}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Paid sales only</p>
+                <p className="text-xs text-muted-foreground mt-1">Normal sales + Credit payments</p>
               </CardContent>
             </Card>
             <Card>
@@ -462,20 +682,50 @@ export function SalesReport() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {paymentSummaries.map((summary) => {
-                    const methodLabel = summary.method === "debt_clearance" 
-                      ? "Credit Payments (Debt Clearance)"
-                      : summary.method.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
-                    return (
-                      <Badge key={summary.method} variant="outline" className="text-base px-3 py-1">
-                        {methodLabel}:{" "}
-                        {currency ? formatCurrency(summary.total, currency) : `$${summary.total.toFixed(2)}`}
-                      </Badge>
-                    )
-                  })}
+                <div className="space-y-3">
+                  {/* Normal Sales by Payment Method */}
+                  {paymentSummaries.filter((s) => !s.method.startsWith("credit_") && s.method !== "debt_clearance").length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-2">Normal Sales:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {paymentSummaries
+                          .filter((s) => !s.method.startsWith("credit_") && s.method !== "debt_clearance")
+                          .map((summary) => {
+                            const methodLabel = summary.method.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
+                            return (
+                              <Badge key={summary.method} variant="outline" className="text-base px-3 py-1">
+                                {methodLabel}:{" "}
+                                {currency ? formatCurrency(summary.total, currency) : `$${summary.total.toFixed(2)}`}
+                              </Badge>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Credit Payments (Debt Clearance) */}
+                  {paymentSummaries.filter((s) => s.method.startsWith("credit_")).length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-2">Credit Payments (Debt Clearance):</p>
+                      <div className="flex flex-wrap gap-2">
+                        {paymentSummaries
+                          .filter((s) => s.method.startsWith("credit_"))
+                          .map((summary) => {
+                            const method = summary.method.replace("credit_", "")
+                            const methodLabel = method.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
+                            return (
+                              <Badge key={summary.method} variant="outline" className="text-base px-3 py-1">
+                                Credit Payments ({methodLabel}):{" "}
+                                {currency ? formatCurrency(summary.total, currency) : `$${summary.total.toFixed(2)}`}
+                              </Badge>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {paymentSummaries.length === 0 && (
+                {paymentSummaries.filter((s) => !s.method.startsWith("credit_") && s.method !== "debt_clearance").length === 0 && 
+                 paymentSummaries.filter((s) => s.method.startsWith("credit_")).length === 0 && (
                   <p className="text-sm text-muted-foreground">No payments found for the selected period</p>
                 )}
               </CardContent>

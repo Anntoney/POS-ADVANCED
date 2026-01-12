@@ -120,9 +120,14 @@ export function StoreManagement() {
     try {
       const supabase = createClient()
 
-      // Check store count if activating
+      // Check store count if activating (only when changing from inactive to active)
       if (isActive && !selectedStore.is_active) {
-        const { data: existingStores } = await supabase.from("stores").select("id").eq("is_active", true)
+        // Count active stores excluding the current store being edited
+        const { data: existingStores } = await supabase
+          .from("stores")
+          .select("id")
+          .eq("is_active", true)
+          .neq("id", selectedStore.id)
         if (existingStores && existingStores.length >= 2) {
           throw new Error("Maximum of 2 active stores allowed. Please deactivate another store first.")
         }

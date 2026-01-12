@@ -189,7 +189,6 @@ export function CustomerCreditDetail({
             ${customer.email ? `<p><strong>Email:</strong> ${customer.email}</p>` : ""}
             ${customer.phone ? `<p><strong>Phone:</strong> ${customer.phone}</p>` : ""}
             ${customer.address ? `<p><strong>Address:</strong> ${customer.address}</p>` : ""}
-            <p><strong>Credit Limit:</strong> ${currencySymbol}${Number(customer.credit_limit).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
 
           <h2>Items Purchased on Credit</h2>
@@ -312,21 +311,6 @@ export function CustomerCreditDetail({
                 : `$${Number(customer.balance).toFixed(2)}`}
             </div>
             <p className="text-xs text-muted-foreground">Outstanding debt</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Credit Limit</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {currency
-                ? formatCurrency(Number(customer.credit_limit), currency)
-                : `$${Number(customer.credit_limit).toFixed(2)}`}
-            </div>
-            <p className="text-xs text-muted-foreground">Maximum credit</p>
           </CardContent>
         </Card>
 

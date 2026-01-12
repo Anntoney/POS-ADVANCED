@@ -31,7 +31,6 @@ type Customer = {
   name: string
   email: string | null
   balance: number
-  credit_limit: number
 }
 
 type CartItem = {
@@ -251,16 +250,6 @@ export function POSInterface({
       if (!selectedCustomer) {
         alert("Please select a customer for credit sales")
         return
-      }
-      const selectedCustomerData = customers.find((c) => c.id === selectedCustomer)
-      if (selectedCustomerData) {
-        const creditAmount = payments.filter((p) => p.method === "credit")
-          .reduce((sum, p) => sum + (Number.parseFloat(p.amount) || 0), 0)
-        const newBalance = Number(selectedCustomerData.balance) + creditAmount
-        if (newBalance > Number(selectedCustomerData.credit_limit)) {
-          alert("Credit limit exceeded!")
-          return
-        }
       }
     }
 
@@ -617,32 +606,6 @@ export function POSInterface({
                             currency,
                           )
                         : `$${Number(customers.find((c) => c.id === selectedCustomer)?.balance || 0).toFixed(2)}`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Credit Limit:</span>
-                    <span className="font-medium">
-                      {currency
-                        ? formatCurrency(
-                            Number(customers.find((c) => c.id === selectedCustomer)?.credit_limit || 0),
-                            currency,
-                          )
-                        : `$${Number(customers.find((c) => c.id === selectedCustomer)?.credit_limit || 0).toFixed(2)}`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Available Credit:</span>
-                    <span className="font-medium text-green-600">
-                      {currency
-                        ? formatCurrency(
-                            Number(customers.find((c) => c.id === selectedCustomer)?.credit_limit || 0) -
-                              Number(customers.find((c) => c.id === selectedCustomer)?.balance || 0),
-                            currency,
-                          )
-                        : `$${(
-                            Number(customers.find((c) => c.id === selectedCustomer)?.credit_limit || 0) -
-                              Number(customers.find((c) => c.id === selectedCustomer)?.balance || 0)
-                          ).toFixed(2)}`}
                     </span>
                   </div>
                 </div>

@@ -17,7 +17,6 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
   const [address, setAddress] = useState(customer?.address || "")
   const [city, setCity] = useState(customer?.city || "")
   const [country, setCountry] = useState(customer?.country || "")
-  const [creditLimit, setCreditLimit] = useState(customer?.credit_limit.toString() || "0")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -38,6 +37,17 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
       return
     }
 
+    // Get user's store context to assign customer to correct store
+    let storeId: string | null = null
+    const { data: profile } = await supabase.from("profiles").select("store_id, role").eq("id", user.id).single()
+    
+    // Only assign store_id if user is not admin or if user has a specific store assigned
+    // Admins without a store can create customers without store assignment (global customers)
+    // But we'll assign to their store if they have one
+    if (profile?.store_id) {
+      storeId = profile.store_id
+    }
+
     const customerData = {
       name,
       email: email || null,
@@ -45,12 +55,17 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
       address: address || null,
       city: city || null,
       country: country || null,
-      credit_limit: Number.parseFloat(creditLimit),
+      store_id: storeId,
     }
 
     try {
       if (customer) {
-        const { error } = await supabase.from("customers").update(customerData).eq("id", customer.id)
+        // When updating, preserve store_id if it exists, or keep the existing one
+        const updateData = { ...customerData }
+        // Don't change store_id when updating (keep existing store assignment)
+        delete (updateData as any).store_id
+        
+        const { error } = await supabase.from("customers").update(updateData).eq("id", customer.id)
         if (error) throw error
         alert("Customer updated successfully!")
         router.push("/dashboard/customers")
@@ -68,7 +83,6 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
         setAddress("")
         setCity("")
         setCountry("")
-        setCreditLimit("0")
         router.push("/dashboard/customers")
         router.refresh()
       }
@@ -121,18 +135,6 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
               <Input id="country" placeholder="USA" value={country} onChange={(e) => setCountry(e.target.value)} />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="creditLimit">Credit Limit</Label>
-              <Input
-                id="creditLimit"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={creditLimit}
-                onChange={(e) => setCreditLimit(e.target.value)}
-              />
-            </div>
           </div>
 
           <div className="grid gap-2">

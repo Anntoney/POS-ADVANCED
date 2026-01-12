@@ -124,15 +124,24 @@ BEGIN
 END $$;
 
 -- Function to enforce max 2 stores limit
+-- Fixed to exclude current store from count when updating
 CREATE OR REPLACE FUNCTION check_max_stores()
 RETURNS TRIGGER AS $$
 DECLARE
   store_count INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO store_count FROM stores WHERE is_active = true;
-  
-  IF store_count >= 2 AND (NEW.is_active = true OR (OLD.is_active = false AND NEW.is_active = true)) THEN
-    RAISE EXCEPTION 'Maximum of 2 stores allowed. Please deactivate an existing store first.';
+  -- Only check limit when activating a store (inserting new active store or activating inactive store)
+  -- When updating an already active store, don't check the limit
+  IF (TG_OP = 'INSERT' AND NEW.is_active = true) OR (TG_OP = 'UPDATE' AND OLD.is_active = false AND NEW.is_active = true) THEN
+    -- Count active stores, excluding the current store being inserted/updated
+    SELECT COUNT(*) INTO store_count 
+    FROM stores 
+    WHERE is_active = true 
+    AND id != NEW.id;
+    
+    IF store_count >= 2 THEN
+      RAISE EXCEPTION 'Maximum of 2 active stores allowed. Please deactivate an existing store first.';
+    END IF;
   END IF;
   
   RETURN NEW;

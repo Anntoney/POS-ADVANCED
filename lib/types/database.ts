@@ -78,7 +78,6 @@ export interface Customer {
   address: string | null
   city: string | null
   country: string | null
-  credit_limit: number
   balance: number
   store_id: string | null
   created_by: string | null
@@ -163,4 +162,36 @@ export interface StockTransfer {
   created_by: string | null
   created_at: string
   updated_at: string
+}
+
+export interface Quotation {
+  id: string
+  quotation_number: string
+  customer_id: string | null
+  quotation_date: string
+  expiry_date: string | null
+  subtotal: number
+  tax_amount: number
+  discount_amount: number
+  total_amount: number
+  status: QuotationStatus
+  notes: string | null
+  store_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface QuotationItem {
+  id: string
+  quotation_id: string
+  product_id: string | null
+  product_name: string
+  quantity: number
+  unit_price: number
+  tax_rate: number
+  tax_amount: number
+  discount_amount: number
+  total_amount: number
+  created_at: string
 }
