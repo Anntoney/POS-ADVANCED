@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { Check, X, Package, RefreshCw, Plus, Search } from "lucide-react"
+import { Check, X, Package, RefreshCw, Plus, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import type { StockTransfer, Store, Product } from "@/lib/types/database"
@@ -411,32 +411,45 @@ export function StockTransferLogs({
                     </TableCell>
                     <TableCell>{new Date(transfer.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      {transfer.status === "pending" && (
-                        <div className="flex justify-end gap-2">
-                          {/* Allow receiving store users or admins to complete */}
-                          {(isAdmin || (userStoreId && (transfer.to_store as any)?.id === userStoreId)) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleCompleteTransfer(transfer.id)}
-                              title="Confirm Receipt"
-                            >
-                              <Check className="h-4 w-4 text-green-600" />
-                            </Button>
-                          )}
-                          {/* Only admins can cancel */}
-                          {isAdmin && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleCancelTransfer(transfer.id)}
-                              title="Cancel Transfer"
-                            >
-                              <X className="h-4 w-4 text-red-600" />
-                            </Button>
-                          )}
-                        </div>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        {transfer.status === "pending" && (
+                          <>
+                            {/* Allow receiving store users or admins to complete */}
+                            {(isAdmin || (userStoreId && (transfer.to_store as any)?.id === userStoreId)) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleCompleteTransfer(transfer.id)}
+                                title="Confirm Receipt"
+                              >
+                                <Check className="h-4 w-4 text-green-600" />
+                              </Button>
+                            )}
+                            {/* Only admins can cancel */}
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleCancelTransfer(transfer.id)}
+                                title="Cancel Transfer"
+                              >
+                                <X className="h-4 w-4 text-red-600" />
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {/* Only admins can delete any transfer log */}
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteTransfer(transfer.id)}
+                            title="Delete Transfer Log"
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
