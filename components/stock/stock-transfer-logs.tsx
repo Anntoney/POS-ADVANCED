@@ -297,19 +297,28 @@ export function StockTransferLogs({
 
     try {
       const supabase = createClient()
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from("stock_transfers")
         .delete()
         .eq("id", transferId)
+        .select()
 
-      if (error) throw error
+      if (error) {
+        console.error("Delete error:", error)
+        throw error
+      }
 
+      // Remove from local state immediately for better UX
+      setTransfers((prev) => prev.filter((t) => t.id !== transferId))
+      
+      // Reload to ensure consistency
       await loadTransfers()
       router.refresh()
-      alert("Transfer log deleted successfully")
     } catch (error: any) {
       console.error("Error deleting transfer:", error)
-      alert(`Error deleting transfer: ${error.message || "An unexpected error occurred"}`)
+      // Reload on error to show actual state
+      await loadTransfers()
+      alert(`Error deleting transfer: ${error.message || "An unexpected error occurred. You may need admin permissions."}`)
     }
   }
 
