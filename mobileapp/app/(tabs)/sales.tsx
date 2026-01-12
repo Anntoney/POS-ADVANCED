@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { Sale, Store } from '@/lib/types';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
 import { useTheme } from '@/lib/contexts/ThemeContext';
+import { CalendarPicker } from '@/lib/components/CalendarPicker';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
 export default function SalesScreen() {
@@ -31,6 +32,12 @@ export default function SalesScreen() {
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [showFromDatePicker, setShowFromDatePicker] = useState(false);
+  const [showToDatePicker, setShowToDatePicker] = useState(false);
+  const [fromDatePickerValue, setFromDatePickerValue] = useState<Date>(new Date());
+  const [toDatePickerValue, setToDatePickerValue] = useState<Date>(new Date());
+  const [grossProfit, setGrossProfit] = useState<number>(0);
+  const [calculatingGross, setCalculatingGross] = useState(false);
 
   const loadStores = async () => {
     try {
@@ -49,9 +56,19 @@ export default function SalesScreen() {
 
   const loadSales = async () => {
     try {
+      setLoading(true);
       let query = supabase
         .from('sales')
-        .select('*')
+        .select(`
+          *,
+          sale_items (
+            id,
+            product_id,
+            quantity,
+            unit_price,
+            total_amount
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (selectedStoreId) {
@@ -62,17 +79,19 @@ export default function SalesScreen() {
 
       if (error) throw error;
 
-      setAllSales(data || []);
-      applyFilters(data || []);
+      const salesData = data || [];
+      setAllSales(salesData);
+      // Apply filters will be called by useEffect when allSales updates
     } catch (error) {
       console.error('Error loading sales:', error);
+      setAllSales([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const applyFilters = (salesData: Sale[]) => {
+  const applyFilters = useCallback((salesData: Sale[]) => {
     let filtered = [...salesData];
 
     // Filter by date range
@@ -91,7 +110,7 @@ export default function SalesScreen() {
     // Limit to 50 for display
     filtered = filtered.slice(0, 50);
     setSales(filtered);
-  };
+  }, [fromDate, toDate]);
 
   useEffect(() => {
     loadStores();
@@ -99,16 +118,72 @@ export default function SalesScreen() {
   }, []);
 
   useEffect(() => {
-    if (stores.length > 0) {
+    // Reload sales when store selection changes
+    if (stores.length > 0 || selectedStoreId === null) {
+      setLoading(true);
       loadSales();
     }
   }, [selectedStoreId]);
 
   useEffect(() => {
-    if (allSales.length > 0) {
-      applyFilters(allSales);
+    // Apply date filters when dates change or allSales updates
+    applyFilters(allSales);
+  }, [fromDate, toDate, allSales, applyFilters]);
+
+  // Calculate gross profit (total sales - cost of goods sold)
+  const calculateGrossProfit = useCallback(async () => {
+    try {
+      const saleIds = sales.map(s => s.id);
+      if (saleIds.length === 0) return 0;
+
+      // Get all sale items with product cost prices
+      const { data: saleItems, error } = await supabase
+        .from('sale_items')
+        .select(`
+          sale_id,
+          quantity,
+          unit_price,
+          product_id,
+          products:product_id (
+            cost_price
+          )
+        `)
+        .in('sale_id', saleIds);
+
+      if (error) {
+        console.error('Error fetching sale items:', error);
+        return 0;
+      }
+
+      let totalCost = 0;
+      let totalRevenue = 0;
+
+      saleItems?.forEach((item: any) => {
+        const costPrice = item.products?.cost_price || 0;
+        const revenue = Number(item.unit_price || 0) * Number(item.quantity || 0);
+        const cost = Number(costPrice) * Number(item.quantity || 0);
+        totalCost += cost;
+        totalRevenue += revenue;
+      });
+
+      return totalRevenue - totalCost;
+    } catch (error) {
+      console.error('Error calculating gross profit:', error);
+      return 0;
     }
-  }, [fromDate, toDate, allSales.length]);
+  }, [sales]);
+
+  useEffect(() => {
+    if (sales.length > 0) {
+      setCalculatingGross(true);
+      calculateGrossProfit().then(gross => {
+        setGrossProfit(gross);
+        setCalculatingGross(false);
+      });
+    } else {
+      setGrossProfit(0);
+    }
+  }, [sales.length, calculateGrossProfit]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -211,14 +286,6 @@ export default function SalesScreen() {
     );
   };
 
-  if (loading) {
-    return (
-      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   const totalRevenue = sales.reduce(
     (sum, sale) => sum + Number(sale.total_amount || 0),
     0
@@ -270,26 +337,125 @@ export default function SalesScreen() {
         <View style={[styles.dateFilterContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.dateRow}>
             <Text style={[styles.dateLabel, { color: colors.text }]}>From:</Text>
-            <TextInput
-              style={[styles.dateInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-              value={fromDate}
-              onChangeText={setFromDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textSecondary}
-              {...(Platform.OS === 'web' && { type: 'date' })}
-            />
+            {Platform.OS === 'web' ? (
+              <TextInput
+                style={[styles.dateInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            ) : (
+              <>
+              <TouchableOpacity
+                style={[styles.dateInput, { backgroundColor: colors.background, borderColor: colors.border, justifyContent: 'center' }]}
+                onPress={() => {
+                  if (fromDate) {
+                    setFromDatePickerValue(new Date(fromDate + 'T00:00:00'));
+                  } else {
+                    setFromDatePickerValue(new Date());
+                  }
+                  setShowFromDatePicker(true);
+                }}
+              >
+                <Text style={{ color: colors.text }}>
+                  {fromDate || 'Tap to select'}
+                </Text>
+              </TouchableOpacity>
+              </>
+            )}
           </View>
           <View style={styles.dateRow}>
             <Text style={[styles.dateLabel, { color: colors.text }]}>To:</Text>
-            <TextInput
-              style={[styles.dateInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-              value={toDate}
-              onChangeText={setToDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textSecondary}
-              {...(Platform.OS === 'web' && { type: 'date' })}
-            />
+            {Platform.OS === 'web' ? (
+              <TextInput
+                style={[styles.dateInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            ) : (
+              <>
+              <TouchableOpacity
+                style={[styles.dateInput, { backgroundColor: colors.background, borderColor: colors.border, justifyContent: 'center' }]}
+                onPress={() => {
+                  if (toDate) {
+                    setToDatePickerValue(new Date(toDate + 'T00:00:00'));
+                  } else {
+                    setToDatePickerValue(new Date());
+                  }
+                  setShowToDatePicker(true);
+                }}
+              >
+                <Text style={{ color: colors.text }}>
+                  {toDate || 'Tap to select'}
+                </Text>
+              </TouchableOpacity>
+              </>
+            )}
           </View>
+          
+          {/* Date Picker Modals */}
+          {Platform.OS !== 'web' && (
+            <>
+              <Modal
+                visible={showFromDatePicker}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowFromDatePicker(false)}
+              >
+                <View style={styles.modalOverlay}>
+                  <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                    <View style={styles.modalHeader}>
+                      <Text style={[styles.modalTitle, { color: colors.text }]}>Select From Date</Text>
+                      <TouchableOpacity onPress={() => setShowFromDatePicker(false)}>
+                        <Text style={{ fontSize: 24, color: colors.text }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <ScrollView>
+                      <CalendarPicker
+                        value={fromDatePickerValue}
+                        onChange={(date) => {
+                          setFromDatePickerValue(date);
+                          setFromDate(date.toISOString().split('T')[0]);
+                        }}
+                        onClose={() => setShowFromDatePicker(false)}
+                        colors={colors}
+                      />
+                    </ScrollView>
+                  </View>
+                </View>
+              </Modal>
+              
+              <Modal
+                visible={showToDatePicker}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowToDatePicker(false)}
+              >
+                <View style={styles.modalOverlay}>
+                  <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                    <View style={styles.modalHeader}>
+                      <Text style={[styles.modalTitle, { color: colors.text }]}>Select To Date</Text>
+                      <TouchableOpacity onPress={() => setShowToDatePicker(false)}>
+                        <Text style={{ fontSize: 24, color: colors.text }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <ScrollView>
+                      <CalendarPicker
+                        value={toDatePickerValue}
+                        onChange={(date) => {
+                          setToDatePickerValue(date);
+                          setToDate(date.toISOString().split('T')[0]);
+                        }}
+                        onClose={() => setShowToDatePicker(false)}
+                        colors={colors}
+                      />
+                    </ScrollView>
+                  </View>
+                </View>
+              </Modal>
+            </>
+          )}
           <View style={styles.dateActionRow}>
             <TouchableOpacity
               style={[styles.dateActionButton, { backgroundColor: colors.primary }]}
@@ -321,12 +487,23 @@ export default function SalesScreen() {
 
       <View style={[styles.summaryCard, { backgroundColor: colors.primary }]}>
         <Text style={styles.summaryLabel}>
-          Total Revenue
+          Total Sales
+          {selectedStore ? ` - ${selectedStore.name}` : ' - All Shops'}
           {fromDate || toDate ? ' (Filtered)' : ' (Last 50 Sales)'}
         </Text>
         <Text style={styles.summaryValue}>
           {formatCurrency(totalRevenue, currency || undefined)}
         </Text>
+        {!calculatingGross && (
+          <>
+            <Text style={[styles.summaryLabel, { marginTop: 12 }]}>
+              Gross Profit
+            </Text>
+            <Text style={styles.summaryValue}>
+              {formatCurrency(grossProfit, currency || undefined)}
+            </Text>
+          </>
+        )}
         <Text style={styles.summaryCount}>
           {sales.length} sale{sales.length !== 1 ? 's' : ''}
         </Text>
@@ -637,5 +814,8 @@ const styles = StyleSheet.create({
   },
   storeOptionText: {
     fontSize: 16,
+  },
+  datePickerContainer: {
+    padding: 16,
   },
 });
