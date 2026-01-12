@@ -3,6 +3,7 @@ import { StockTransferLogs } from "@/components/stock/stock-transfer-logs"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { PermissionGuard } from "@/components/dashboard/permission-guard"
+import { getUserStoreContext } from "@/lib/utils/store-context"
 
 export default async function StockTransfersPage() {
   const supabase = await createClient()
@@ -15,16 +16,19 @@ export default async function StockTransfersPage() {
     redirect("/auth/login")
   }
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-
-  const isAdmin = profile?.role === "admin"
+  const storeContext = await getUserStoreContext(user.id)
 
   return (
     <PermissionGuard feature="stock_transfer">
       <div>
         <Header title="Stock Transfer Logs" />
         <div className="p-6" suppressHydrationWarning>
-          <StockTransferLogs userId={user.id} isAdmin={isAdmin || false} />
+          <StockTransferLogs 
+            userId={user.id} 
+            isAdmin={storeContext.isAdmin}
+            userStoreId={storeContext.storeId}
+            canAccessAllStores={storeContext.canAccessAllStores}
+          />
         </div>
       </div>
     </PermissionGuard>

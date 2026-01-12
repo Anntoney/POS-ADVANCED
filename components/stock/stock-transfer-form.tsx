@@ -19,7 +19,19 @@ type ProductWithStore = Product & {
   units?: { short_name: string } | null
 }
 
-export function StockTransferForm({ products, stores, userId }: { products: ProductWithStore[]; stores: Store[]; userId: string }) {
+export function StockTransferForm({ 
+  products, 
+  stores, 
+  userId,
+  userStoreId,
+  canAccessAllStores 
+}: { 
+  products: ProductWithStore[]; 
+  stores: Store[]; 
+  userId: string;
+  userStoreId: string | null;
+  canAccessAllStores: boolean;
+}) {
   const [fromStoreId, setFromStoreId] = useState<string>("")
   const [toStoreId, setToStoreId] = useState<string>("")
   const [productId, setProductId] = useState<string>("")
@@ -32,6 +44,20 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
   const [availableProducts, setAvailableProducts] = useState<ProductWithStore[]>([])
   const [selectedProduct, setSelectedProduct] = useState<ProductWithStore | null>(null)
   const [productSearchTerm, setProductSearchTerm] = useState("")
+
+  const activeStores = stores.filter((s) => s.is_active)
+  
+  // Filter stores for "from store" - users can only select their own store unless admin
+  const availableFromStores = canAccessAllStores 
+    ? activeStores 
+    : activeStores.filter((s) => s.id === userStoreId)
+
+  // Auto-select user's store if they only have access to one store
+  useEffect(() => {
+    if (!canAccessAllStores && userStoreId && availableFromStores.length === 1 && !fromStoreId) {
+      setFromStoreId(userStoreId)
+    }
+  }, [canAccessAllStores, userStoreId, availableFromStores.length, fromStoreId])
 
   useEffect(() => {
     if (fromStoreId) {
@@ -168,6 +194,11 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
   }
 
   const activeStores = stores.filter((s) => s.is_active)
+  
+  // Filter stores for "from store" - users can only select their own store unless admin
+  const availableFromStores = canAccessAllStores 
+    ? activeStores 
+    : activeStores.filter((s) => s.id === userStoreId)
 
   return (
     <Card>
@@ -193,18 +224,25 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="fromStore">From Store *</Label>
-              <Select value={fromStoreId} onValueChange={setFromStoreId}>
+              <Select 
+                value={fromStoreId} 
+                onValueChange={setFromStoreId}
+                disabled={!canAccessAllStores && availableFromStores.length === 1 && availableFromStores[0]?.id === userStoreId}
+              >
                 <SelectTrigger id="fromStore">
                   <SelectValue placeholder="Select source store" />
                 </SelectTrigger>
                 <SelectContent>
-                  {activeStores.map((store) => (
+                  {availableFromStores.map((store) => (
                     <SelectItem key={store.id} value={store.id}>
                       {store.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {!canAccessAllStores && userStoreId && (
+                <p className="text-xs text-muted-foreground">You can only transfer from your assigned store</p>
+              )}
             </div>
 
             <div className="space-y-2">

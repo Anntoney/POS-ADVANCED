@@ -4,6 +4,7 @@ import { StockTransferPageClient } from "@/components/stock/stock-transfer-page-
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { PermissionGuard } from "@/components/dashboard/permission-guard"
+import { getUserStoreContext } from "@/lib/utils/store-context"
 
 export default async function StockTransferPage() {
   const supabase = await createClient()
@@ -16,20 +17,32 @@ export default async function StockTransferPage() {
     redirect("/auth/login")
   }
 
-  const [{ data: stores }, { data: products }] = await Promise.all([
-    supabase.from("stores").select("*").eq("is_active", true).order("name"),
-    supabase
-      .from("products")
-      .select(
-        `
+  const storeContext = await getUserStoreContext(user.id)
+
+  // Fetch stores - filter by user's store if not admin
+  let storesQuery = supabase.from("stores").select("*").eq("is_active", true)
+  if (!storeContext.canAccessAllStores && storeContext.storeId) {
+    storesQuery = storesQuery.eq("id", storeContext.storeId)
+  }
+  const { data: stores } = await storesQuery.order("name")
+
+  // Fetch products - filter by user's store if not admin
+  let productsQuery = supabase
+    .from("products")
+    .select(
+      `
       *,
       categories (name),
       units (short_name)
     `,
-      )
-      .eq("is_active", true)
-      .order("name"),
-  ])
+    )
+    .eq("is_active", true)
+  
+  if (!storeContext.canAccessAllStores && storeContext.storeId) {
+    productsQuery = productsQuery.eq("store_id", storeContext.storeId)
+  }
+  
+  const { data: products } = await productsQuery.order("name")
 
   if (!stores || stores.length < 2) {
     return (
@@ -50,7 +63,13 @@ export default async function StockTransferPage() {
         <Header title="Stock Transfer" />
         <div className="p-6 space-y-6">
           <StockTransferPageClient stores={stores || []} userId={user.id} />
-          <StockTransferForm products={products || []} stores={stores || []} userId={user.id} />
+          <StockTransferForm 
+            products={products || []} 
+            stores={stores || []} 
+            userId={user.id}
+            userStoreId={storeContext.storeId}
+            canAccessAllStores={storeContext.canAccessAllStores}
+          />
         </div>
       </div>
     </PermissionGuard>

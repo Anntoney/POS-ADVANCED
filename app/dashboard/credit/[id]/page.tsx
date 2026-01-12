@@ -69,31 +69,31 @@ export default async function CustomerCreditDetailPage({
   }))
   
   // Check if any sales are missing sale_items and fetch them separately
-  const salesWithoutItems = salesWithItems.filter((s: any) => !s.sale_items || s.sale_items.length === 0)
-  
-  if (salesWithoutItems.length > 0) {
-    const saleIds = salesWithoutItems.map((s: any) => s.id)
-    const { data: items, error: itemsError } = await supabase
-      .from("sale_items")
-      .select("*")
-      .in("sale_id", saleIds)
+    const salesWithoutItems = salesWithItems.filter((s: any) => !s.sale_items || s.sale_items.length === 0)
     
+    if (salesWithoutItems.length > 0) {
+      const saleIds = salesWithoutItems.map((s: any) => s.id)
+      const { data: items, error: itemsError } = await supabase
+        .from("sale_items")
+        .select("*")
+        .in("sale_id", saleIds)
+      
     if (itemsError) {
       console.error("Error fetching sale_items:", itemsError)
     }
     
-    // Merge sale_items back into sales
+      // Merge sale_items back into sales
     if (items && items.length > 0) {
-      salesWithItems = salesWithItems.map((sale: any) => {
-        if (!sale.sale_items || sale.sale_items.length === 0) {
+        salesWithItems = salesWithItems.map((sale: any) => {
+          if (!sale.sale_items || sale.sale_items.length === 0) {
           const saleItems = items.filter((item: any) => item.sale_id === sale.id)
-          return {
-            ...sale,
+            return {
+              ...sale,
             sale_items: saleItems
+            }
           }
-        }
-        return sale
-      })
+          return sale
+        })
     }
   }
 

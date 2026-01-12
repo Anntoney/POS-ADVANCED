@@ -19,7 +19,17 @@ type StockTransferWithRelations = StockTransfer & {
   profiles: { full_name: string | null; email: string } | null
 }
 
-export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
+export function StockTransferLogs({ 
+  userId, 
+  isAdmin,
+  userStoreId,
+  canAccessAllStores
+}: { 
+  userId: string; 
+  isAdmin: boolean;
+  userStoreId: string | null;
+  canAccessAllStores: boolean;
+}) {
   const [transfers, setTransfers] = useState<StockTransferWithRelations[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [userStoreId, setUserStoreId] = useState<string | null>(null)
@@ -52,9 +62,13 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
         profiles(id, full_name, email)
       `,
       )
-      .order("created_at", { ascending: false })
 
-    const { data, error } = await query
+    // Filter transfers by store - users can only see transfers from/to their store unless admin
+    if (!canAccessAllStores && userStoreId) {
+      query = query.or(`from_store_id.eq.${userStoreId},to_store_id.eq.${userStoreId}`)
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error loading transfers:", error)
