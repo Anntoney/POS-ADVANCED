@@ -99,14 +99,15 @@ export function StockTransferLogs({
       if (productError) throw productError
       if (!sourceProduct) throw new Error("Source product not found in source store")
 
-      // Create a clean product object without the id field to avoid duplicate key errors
+      // Create a clean product object without system fields to avoid duplicate key errors
+      // Extract and exclude: id, store_id, created_at, updated_at
       const {
-        id: _sourceProductId, // Extract and discard id
-        store_id: _sourceStoreId, // Extract and discard store_id
-        created_at: _createdAt, // Extract and discard created_at
-        updated_at: _updatedAt, // Extract and discard updated_at
+        id: _sourceProductId,
+        store_id: _sourceStoreId,
+        created_at: _createdAt,
+        updated_at: _updatedAt,
         ...cleanProductData
-      } = sourceProduct
+      } = sourceProduct as any
 
       // Verify source store has enough stock
       if (sourceProduct.stock_quantity < transfer.quantity) {
