@@ -19,12 +19,25 @@ export default async function StockTransferPage() {
 
   const storeContext = await getUserStoreContext(user.id)
 
-  // Fetch stores - filter by user's store if not admin
-  let storesQuery = supabase.from("stores").select("*").eq("is_active", true)
-  if (!storeContext.canAccessAllStores && storeContext.storeId) {
-    storesQuery = storesQuery.eq("id", storeContext.storeId)
+  // Fetch ALL active stores to check if we have at least 2
+  const { data: allActiveStores } = await supabase
+    .from("stores")
+    .select("*")
+    .eq("is_active", true)
+    .order("name")
+
+  if (!allActiveStores || allActiveStores.length < 2) {
+    return (
+      <div>
+        <Header title="Stock Transfer" />
+        <div className="p-6">
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">You need at least 2 active stores to transfer stock between them.</p>
+          </div>
+        </div>
+      </div>
+    )
   }
-  const { data: stores } = await storesQuery.order("name")
 
   // Fetch products - filter by user's store if not admin
   let productsQuery = supabase
@@ -44,28 +57,15 @@ export default async function StockTransferPage() {
   
   const { data: products } = await productsQuery.order("name")
 
-  if (!stores || stores.length < 2) {
-    return (
-      <div>
-        <Header title="Stock Transfer" />
-        <div className="p-6">
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">You need at least 2 active stores to transfer stock between them.</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <PermissionGuard feature="stock_transfer">
       <div>
         <Header title="Stock Transfer" />
         <div className="p-6 space-y-6">
-          <StockTransferPageClient stores={stores || []} userId={user.id} />
+          <StockTransferPageClient stores={allActiveStores || []} userId={user.id} />
           <StockTransferForm 
             products={products || []} 
-            stores={stores || []} 
+            stores={allActiveStores || []} 
             userId={user.id}
             userStoreId={storeContext.storeId}
             canAccessAllStores={storeContext.canAccessAllStores}

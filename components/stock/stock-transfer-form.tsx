@@ -52,12 +52,18 @@ export function StockTransferForm({
     ? activeStores 
     : activeStores.filter((s) => s.id === userStoreId)
 
-  // Auto-select user's store if they only have access to one store
+  // Auto-select user's store as "from store" and the other store as "to store"
   useEffect(() => {
     if (!canAccessAllStores && userStoreId && availableFromStores.length === 1 && !fromStoreId) {
       setFromStoreId(userStoreId)
+      
+      // Auto-select the other store as "to store" if there are only 2 stores
+      const otherStore = activeStores.find((s) => s.id !== userStoreId)
+      if (otherStore && activeStores.length === 2) {
+        setToStoreId(otherStore.id)
+      }
     }
-  }, [canAccessAllStores, userStoreId, availableFromStores.length, fromStoreId])
+  }, [canAccessAllStores, userStoreId, availableFromStores.length, fromStoreId, activeStores])
 
   useEffect(() => {
     if (fromStoreId) {
