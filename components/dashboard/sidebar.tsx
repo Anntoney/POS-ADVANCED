@@ -19,6 +19,7 @@ import {
   Warehouse,
   ArrowLeftRight,
   CreditCard,
+  Truck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
@@ -33,6 +34,7 @@ const navigation = [
   { name: "Products", href: "/dashboard/products", icon: Package, feature: "products" as Feature },
   { name: "Categories", href: "/dashboard/categories", icon: FolderOpen, feature: "categories" as Feature },
   { name: "Stock", href: "/dashboard/stock", icon: Warehouse, feature: "stock" as Feature },
+  { name: "Stock Transfer", href: "/dashboard/stock/transfer", icon: Truck, feature: "stock_transfer" as Feature },
   { name: "Sales", href: "/dashboard/sales", icon: ShoppingCart, feature: "sales" as Feature },
   { name: "Purchases", href: "/dashboard/purchases", icon: ShoppingBag, feature: "purchases" as Feature },
   { name: "Returns", href: "/dashboard/returns", icon: ArrowLeftRight, feature: "returns" as Feature },
@@ -95,7 +97,7 @@ export function Sidebar() {
   })
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-sidebar shadow-lg">
+    <div className="flex h-full w-64 flex-col border-r bg-sidebar shadow-lg" suppressHydrationWarning>
       <div className="flex h-16 items-center border-b border-sidebar-border px-6 bg-gradient-to-r from-primary/5 to-secondary/5">
         <Link href="/dashboard" className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
           POS System
