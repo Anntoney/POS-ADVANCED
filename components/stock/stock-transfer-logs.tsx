@@ -99,6 +99,15 @@ export function StockTransferLogs({
       if (productError) throw productError
       if (!sourceProduct) throw new Error("Source product not found in source store")
 
+      // Create a clean product object without the id field to avoid duplicate key errors
+      const {
+        id: _sourceProductId, // Extract and discard id
+        store_id: _sourceStoreId, // Extract and discard store_id
+        created_at: _createdAt, // Extract and discard created_at
+        updated_at: _updatedAt, // Extract and discard updated_at
+        ...cleanProductData
+      } = sourceProduct
+
       // Verify source store has enough stock
       if (sourceProduct.stock_quantity < transfer.quantity) {
         const errorMsg = `Cannot complete transfer: Insufficient stock.\n\n` +
@@ -177,24 +186,20 @@ export function StockTransferLogs({
         }
 
         // Create new product in destination store
+        // Use clean product data (without id, store_id, timestamps) and add new values
+        const productData: any = {
+          ...cleanProductData,
+          sku: newSku,
+          barcode: newBarcode,
+          stock_quantity: transfer.quantity,
+          store_id: transfer.to_store_id,
+          // created_by will be from cleanProductData, but we can override if needed
+        }
+        
+        // Explicitly exclude id, created_at, updated_at to ensure new UUID is generated
         const { data: newProduct, error: insertError } = await supabase
           .from("products")
-          .insert({
-            name: sourceProduct.name,
-            sku: newSku,
-            barcode: newBarcode,
-            category_id: sourceProduct.category_id,
-            unit_id: sourceProduct.unit_id,
-            description: sourceProduct.description,
-            cost_price: sourceProduct.cost_price,
-            selling_price: sourceProduct.selling_price,
-            stock_quantity: transfer.quantity,
-            min_stock_level: sourceProduct.min_stock_level,
-            tax_rate: sourceProduct.tax_rate,
-            is_active: sourceProduct.is_active,
-            created_by: sourceProduct.created_by,
-            store_id: transfer.to_store_id,
-          })
+          .insert(productData)
           .select("id")
           .single()
 
@@ -202,24 +207,17 @@ export function StockTransferLogs({
           // If still duplicate key error, try with completely unique SKU
           if (insertError.message?.includes("sku") || insertError.message?.includes("duplicate") || insertError.message?.includes("unique")) {
             const uniqueSku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+            const retryProductData: any = {
+              ...cleanProductData,
+              sku: uniqueSku,
+              barcode: null, // Set barcode to null to avoid conflicts
+              stock_quantity: transfer.quantity,
+              store_id: transfer.to_store_id,
+            }
+            // Explicitly exclude id, created_at, updated_at to ensure new UUID is generated
             const { data: retryProduct, error: retryError } = await supabase
               .from("products")
-              .insert({
-                name: sourceProduct.name,
-                sku: uniqueSku,
-                barcode: null, // Set barcode to null to avoid conflicts
-                category_id: sourceProduct.category_id,
-                unit_id: sourceProduct.unit_id,
-                description: sourceProduct.description,
-                cost_price: sourceProduct.cost_price,
-                selling_price: sourceProduct.selling_price,
-                stock_quantity: transfer.quantity,
-                min_stock_level: sourceProduct.min_stock_level,
-                tax_rate: sourceProduct.tax_rate,
-                is_active: sourceProduct.is_active,
-                created_by: sourceProduct.created_by,
-                store_id: transfer.to_store_id,
-              })
+              .insert(retryProductData)
               .select("id")
               .single()
 
@@ -243,15 +241,21 @@ export function StockTransferLogs({
         .eq("id", sourceProduct.id)
         .eq("store_id", transfer.from_store_id)
 
-      if (deductError) throw deductError
+      if (deductError) {
+        console.error("Error deducting stock:", deductError)
+        throw new Error(`Failed to deduct stock from source store: ${deductError.message}`)
+      }
 
-      // Update transfer status to completed
+      // Update transfer status to completed (this will hide action buttons)
       const { error: statusError } = await supabase
         .from("stock_transfers")
         .update({ status: "completed", updated_at: new Date().toISOString() })
         .eq("id", transferId)
 
-      if (statusError) throw statusError
+      if (statusError) {
+        console.error("Error updating transfer status:", statusError)
+        throw new Error(`Failed to update transfer status: ${statusError.message}`)
+      }
 
       // Mark related notifications as read
       await supabase
@@ -260,6 +264,7 @@ export function StockTransferLogs({
         .eq("related_id", transferId)
         .eq("user_id", userId)
 
+      // Reload transfers to reflect the completed status (action buttons will be hidden)
       await loadTransfers()
       router.refresh()
       alert("Transfer completed successfully! Stock has been moved between stores.")
