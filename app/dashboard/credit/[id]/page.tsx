@@ -36,8 +36,10 @@ export default async function CustomerCreditDetailPage({
     notFound() // Return 404 if trying to access customer from another store
   }
 
-  // Fetch all sales for this customer (both credit and paid) - filter by store if needed
-  let salesQuery = supabase
+  // Fetch all sales for this customer - we'll filter for credit sales in the component
+  // Since we've already verified the customer belongs to the cashier's store,
+  // we can fetch all sales for this customer without additional store filtering
+  const { data: sales, error: salesError } = await supabase
     .from("sales")
     .select(`
       *,
@@ -54,12 +56,46 @@ export default async function CustomerCreditDetailPage({
       )
     `)
     .eq("customer_id", id)
+    .order("sale_date", { ascending: false })
 
-  if (!storeContext.canAccessAllStores && storeContext.storeId) {
-    salesQuery = salesQuery.eq("store_id", storeContext.storeId)
+  if (salesError) {
+    console.error("Error fetching sales:", salesError)
   }
 
-  const { data: sales } = await salesQuery.order("sale_date", { ascending: false })
+  // Ensure sale_items are always loaded - fetch separately if needed
+  let salesWithItems = (sales || []).map((sale: any) => ({
+    ...sale,
+    sale_items: sale.sale_items || []
+  }))
+  
+  // Check if any sales are missing sale_items and fetch them separately
+  const salesWithoutItems = salesWithItems.filter((s: any) => !s.sale_items || s.sale_items.length === 0)
+  
+  if (salesWithoutItems.length > 0) {
+    const saleIds = salesWithoutItems.map((s: any) => s.id)
+    const { data: items, error: itemsError } = await supabase
+      .from("sale_items")
+      .select("*")
+      .in("sale_id", saleIds)
+    
+    if (itemsError) {
+      console.error("Error fetching sale_items:", itemsError)
+    }
+    
+    // Merge sale_items back into sales
+    if (items && items.length > 0) {
+      salesWithItems = salesWithItems.map((sale: any) => {
+        if (!sale.sale_items || sale.sale_items.length === 0) {
+          const saleItems = items.filter((item: any) => item.sale_id === sale.id)
+          return {
+            ...sale,
+            sale_items: saleItems
+          }
+        }
+        return sale
+      })
+    }
+  }
 
   // Fetch all payments for this customer
   // Payments are linked to customers, so we get them directly
@@ -74,7 +110,7 @@ export default async function CustomerCreditDetailPage({
       <div>
         <Header title={`Credit Details - ${customer.name}`} />
         <div className="p-6">
-          <CustomerCreditDetail customer={customer} sales={sales || []} payments={payments || []} />
+          <CustomerCreditDetail customer={customer} sales={salesWithItems} payments={payments || []} />
         </div>
       </div>
     </PermissionGuard>
