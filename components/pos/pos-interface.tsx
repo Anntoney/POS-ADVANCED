@@ -68,10 +68,31 @@ export function POSInterface({
   }
 
   const [payments, setPayments] = useState<PaymentEntry[]>([{ method: "cash", amount: "" }])
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState("cash")
 
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
+    loadDefaultPaymentMethod()
   }, [])
+
+  const loadDefaultPaymentMethod = async () => {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("system_settings")
+        .select("setting_value")
+        .eq("setting_key", "default_payment_method")
+        .single()
+
+      if (data?.setting_value) {
+        setDefaultPaymentMethod(data.setting_value)
+        setPayments([{ method: data.setting_value, amount: "" }])
+      }
+    } catch (error) {
+      console.error("Error loading default payment method:", error)
+      // Keep default as "cash"
+    }
+  }
 
   const filteredProducts = products.filter(
     (p) =>

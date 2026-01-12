@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { Check, X, Package, RefreshCw } from "lucide-react"
+import { Check, X, Package, RefreshCw, Plus } from "lucide-react"
+import Link from "next/link"
 import type { StockTransfer, Store, Product } from "@/lib/types/database"
 
 type StockTransferWithRelations = StockTransfer & {
@@ -20,11 +21,19 @@ type StockTransferWithRelations = StockTransfer & {
 export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const [transfers, setTransfers] = useState<StockTransferWithRelations[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [userStoreId, setUserStoreId] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
+    loadUserStore()
     loadTransfers()
   }, [])
+
+  const loadUserStore = async () => {
+    const supabase = createClient()
+    const { data: profile } = await supabase.from("profiles").select("store_id").eq("id", userId).single()
+    setUserStoreId(profile?.store_id || null)
+  }
 
   const loadTransfers = async () => {
     setIsLoading(true)
@@ -66,6 +75,13 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
         .eq("id", transferId)
 
       if (error) throw error
+
+      // Mark related notifications as read
+      await supabase
+        .from("notifications")
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq("related_id", transferId)
+        .eq("user_id", userId)
 
       await loadTransfers()
       router.refresh()
@@ -122,10 +138,18 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
             </CardTitle>
             <CardDescription>View and manage stock transfers between stores</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={loadTransfers}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard/stock/transfer">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Transfer
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={loadTransfers}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -144,7 +168,7 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
                   <TableHead>Status</TableHead>
                   <TableHead>Created By</TableHead>
                   <TableHead>Date</TableHead>
-                  {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -165,28 +189,34 @@ export function StockTransferLogs({ userId, isAdmin }: { userId: string; isAdmin
                       {transfer.profiles?.full_name || transfer.profiles?.email || "—"}
                     </TableCell>
                     <TableCell>{new Date(transfer.created_at).toLocaleDateString()}</TableCell>
-                    {isAdmin && transfer.status === "pending" && (
-                      <TableCell className="text-right">
+                    <TableCell className="text-right">
+                      {transfer.status === "pending" && (
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleCompleteTransfer(transfer.id)}
-                            title="Complete Transfer"
-                          >
-                            <Check className="h-4 w-4 text-green-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleCancelTransfer(transfer.id)}
-                            title="Cancel Transfer"
-                          >
-                            <X className="h-4 w-4 text-red-600" />
-                          </Button>
+                          {/* Allow receiving store users or admins to complete */}
+                          {(isAdmin || (userStoreId && (transfer.to_store as any)?.id === userStoreId)) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleCompleteTransfer(transfer.id)}
+                              title="Confirm Receipt"
+                            >
+                              <Check className="h-4 w-4 text-green-600" />
+                            </Button>
+                          )}
+                          {/* Only admins can cancel */}
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleCancelTransfer(transfer.id)}
+                              title="Cancel Transfer"
+                            >
+                              <X className="h-4 w-4 text-red-600" />
+                            </Button>
+                          )}
                         </div>
-                      </TableCell>
-                    )}
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

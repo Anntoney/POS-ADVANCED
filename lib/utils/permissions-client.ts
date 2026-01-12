@@ -8,6 +8,7 @@ export type Feature =
   | "products"
   | "categories"
   | "stock"
+  | "stock_transfer"
   | "sales"
   | "purchases"
   | "returns"

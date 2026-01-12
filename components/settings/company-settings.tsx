@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
@@ -23,6 +24,7 @@ export function CompanySettings({ settings }: { settings: SystemSetting[] }) {
   const [companyPhone, setCompanyPhone] = useState("")
   const [companyAddress, setCompanyAddress] = useState("")
   const [taxNumber, setTaxNumber] = useState("")
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState("cash")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -37,6 +39,7 @@ export function CompanySettings({ settings }: { settings: SystemSetting[] }) {
     setCompanyPhone(getSetting("company_phone"))
     setCompanyAddress(getSetting("company_address"))
     setTaxNumber(getSetting("tax_number"))
+    setDefaultPaymentMethod(getSetting("default_payment_method") || "cash")
   }, [settings])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,6 +56,7 @@ export function CompanySettings({ settings }: { settings: SystemSetting[] }) {
       { key: "company_phone", value: companyPhone },
       { key: "company_address", value: companyAddress },
       { key: "tax_number", value: taxNumber },
+      { key: "default_payment_method", value: defaultPaymentMethod },
     ]
 
     try {
@@ -144,6 +148,24 @@ export function CompanySettings({ settings }: { settings: SystemSetting[] }) {
                 value={taxNumber}
                 onChange={(e) => setTaxNumber(e.target.value)}
               />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="defaultPaymentMethod">Default Payment Method</Label>
+              <Select value={defaultPaymentMethod} onValueChange={setDefaultPaymentMethod}>
+                <SelectTrigger id="defaultPaymentMethod">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                This payment method will be selected by default during checkout
+              </p>
             </div>
           </div>
 

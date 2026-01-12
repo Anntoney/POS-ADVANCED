@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Package } from "lucide-react"
+import { ArrowRight, Package, List, Search, X } from "lucide-react"
+import Link from "next/link"
 import type { Store, Product } from "@/lib/types/database"
 
 type ProductWithStore = Product & {
@@ -30,6 +31,7 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
 
   const [availableProducts, setAvailableProducts] = useState<ProductWithStore[]>([])
   const [selectedProduct, setSelectedProduct] = useState<ProductWithStore | null>(null)
+  const [productSearchTerm, setProductSearchTerm] = useState("")
 
   useEffect(() => {
     if (fromStoreId) {
@@ -37,10 +39,12 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
       setAvailableProducts(filtered)
       setProductId("")
       setSelectedProduct(null)
+      setProductSearchTerm("") // Clear search when store changes
     } else {
       setAvailableProducts([])
       setProductId("")
       setSelectedProduct(null)
+      setProductSearchTerm("") // Clear search when store changes
     }
   }, [fromStoreId, products])
 
@@ -53,6 +57,17 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
       setSelectedProduct(null)
     }
   }, [productId, availableProducts])
+
+  // Filter products based on search term
+  const filteredProducts = availableProducts.filter((product) => {
+    if (!productSearchTerm.trim()) return true
+    const searchLower = productSearchTerm.toLowerCase()
+    return (
+      product.name.toLowerCase().includes(searchLower) ||
+      product.sku?.toLowerCase().includes(searchLower) ||
+      product.barcode?.toLowerCase().includes(searchLower)
+    )
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -98,7 +113,7 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
         transferNumber = `TRF-${String(lastNum + 1).padStart(4, "0")}`
       }
 
-      const { error: insertError } = await supabase.from("stock_transfers").insert({
+      const { data: transferData, error: insertError } = await supabase.from("stock_transfers").insert({
         transfer_number: transferNumber,
         from_store_id: fromStoreId,
         to_store_id: toStoreId,
@@ -107,9 +122,33 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
         status: "pending",
         notes: notes.trim() || null,
         created_by: userId,
-      })
+      }).select().single()
 
       if (insertError) throw insertError
+
+      // Get users from the destination store to notify them
+      const { data: storeUsers } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("store_id", toStoreId)
+        .eq("is_active", true)
+
+      // Create notifications for all users in the destination store
+      if (storeUsers && storeUsers.length > 0 && transferData) {
+        const fromStore = stores.find((s) => s.id === fromStoreId)
+        const product = selectedProduct
+        
+        const notifications = storeUsers.map((user) => ({
+          user_id: user.id,
+          type: "stock_transfer",
+          title: "New Stock Transfer",
+          message: `${qty} ${product?.units?.short_name || "units"} of ${product?.name || "product"} transferred from ${fromStore?.name || "store"}. Please confirm receipt.`,
+          related_id: transferData.id,
+          is_read: false,
+        }))
+
+        await supabase.from("notifications").insert(notifications)
+      }
 
       // Reset form
       setFromStoreId("")
@@ -120,7 +159,7 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
       setSelectedProduct(null)
 
       router.refresh()
-      alert("Stock transfer created successfully! Complete it from the transfer logs.")
+      alert("Stock transfer created successfully! The receiving store has been notified.")
     } catch (error: any) {
       setError(error.message || "Failed to create stock transfer")
     } finally {
@@ -133,11 +172,21 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Package className="h-5 w-5" />
-          Transfer Stock Between Stores
-        </CardTitle>
-        <CardDescription>Move stock from one store to another</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Transfer Stock Between Stores
+            </CardTitle>
+            <CardDescription>Move stock from one store to another</CardDescription>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/stock/transfers">
+              <List className="h-4 w-4 mr-2" />
+              View Transfer Logs
+            </Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -179,20 +228,52 @@ export function StockTransferForm({ products, stores, userId }: { products: Prod
 
           <div className="space-y-2">
             <Label htmlFor="product">Product *</Label>
+            {fromStoreId && availableProducts.length > 0 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search products by name, SKU, or barcode..."
+                  value={productSearchTerm}
+                  onChange={(e) => setProductSearchTerm(e.target.value)}
+                  className="pl-10 pr-10"
+                  disabled={!fromStoreId}
+                />
+                {productSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setProductSearchTerm("")}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            )}
             <Select value={productId} onValueChange={setProductId} disabled={!fromStoreId}>
               <SelectTrigger id="product">
-                <SelectValue placeholder="Select product" />
+                <SelectValue placeholder={fromStoreId ? "Select product" : "Select source store first"} />
               </SelectTrigger>
               <SelectContent>
-                {availableProducts.map((product) => (
-                  <SelectItem key={product.id} value={product.id}>
-                    {product.name} ({product.stock_quantity} {product.units?.short_name || ""} available)
-                  </SelectItem>
-                ))}
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.name} ({product.stock_quantity} {product.units?.short_name || ""} available)
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    {productSearchTerm ? "No products found matching your search" : "No products available"}
+                  </div>
+                )}
               </SelectContent>
             </Select>
             {availableProducts.length === 0 && fromStoreId && (
               <p className="text-sm text-muted-foreground">No products with stock available in this store</p>
+            )}
+            {productSearchTerm && filteredProducts.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Showing {filteredProducts.length} of {availableProducts.length} products
+              </p>
             )}
           </div>
 

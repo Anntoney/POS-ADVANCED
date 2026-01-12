@@ -3,6 +3,7 @@ import { StockTransferForm } from "@/components/stock/stock-transfer-form"
 import { StockTransferPageClient } from "@/components/stock/stock-transfer-page-client"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { PermissionGuard } from "@/components/dashboard/permission-guard"
 
 export default async function StockTransferPage() {
   const supabase = await createClient()
@@ -44,12 +45,14 @@ export default async function StockTransferPage() {
   }
 
   return (
-    <div>
-      <Header title="Stock Transfer" />
-      <div className="p-6 space-y-6">
-        <StockTransferPageClient stores={stores || []} userId={user.id} />
-        <StockTransferForm products={products || []} stores={stores || []} userId={user.id} />
+    <PermissionGuard feature="stock_transfer">
+      <div>
+        <Header title="Stock Transfer" />
+        <div className="p-6 space-y-6">
+          <StockTransferPageClient stores={stores || []} userId={user.id} />
+          <StockTransferForm products={products || []} stores={stores || []} userId={user.id} />
+        </div>
       </div>
-    </div>
+    </PermissionGuard>
   )
 }

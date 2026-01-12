@@ -2,6 +2,7 @@ import { Header } from "@/components/dashboard/header"
 import { StockTransferLogs } from "@/components/stock/stock-transfer-logs"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { PermissionGuard } from "@/components/dashboard/permission-guard"
 
 export default async function StockTransfersPage() {
   const supabase = await createClient()
@@ -19,11 +20,13 @@ export default async function StockTransfersPage() {
   const isAdmin = profile?.role === "admin"
 
   return (
-    <div>
-      <Header title="Stock Transfer Logs" />
-      <div className="p-6">
-        <StockTransferLogs userId={user.id} isAdmin={isAdmin || false} />
+    <PermissionGuard feature="stock_transfer">
+      <div>
+        <Header title="Stock Transfer Logs" />
+        <div className="p-6">
+          <StockTransferLogs userId={user.id} isAdmin={isAdmin || false} />
+        </div>
       </div>
-    </div>
+    </PermissionGuard>
   )
 }

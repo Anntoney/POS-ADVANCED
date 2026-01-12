@@ -62,7 +62,12 @@ export function CustomerCreditDetail({
     getDefaultCurrency().then(setCurrency)
   }, [])
 
-  const creditSales = sales.filter((s) => s.payment_status === "credit" || s.payment_status === "partial")
+  // Filter for sales with outstanding balance (pending, partial, or any sale with balance > 0)
+  const creditSales = sales.filter((s) => {
+    const status = s.payment_status?.toLowerCase()
+    const hasBalance = Number(s.total_amount) - Number(s.amount_paid || 0) > 0
+    return (status === "pending" || status === "partial" || status === "credit") || hasBalance
+  })
   const totalCredit = creditSales.reduce((sum, s) => sum + Number(s.total_amount) - Number(s.amount_paid), 0)
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
 
@@ -377,34 +382,40 @@ export function CustomerCreditDetail({
                         </Badge>
                       </div>
 
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Product</TableHead>
-                            <TableHead className="text-right">Qty</TableHead>
-                            <TableHead className="text-right">Unit Price</TableHead>
-                            <TableHead className="text-right">Total</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sale.sale_items.map((item) => (
-                            <TableRow key={item.id}>
-                              <TableCell>{item.product_name}</TableCell>
-                              <TableCell className="text-right">{item.quantity}</TableCell>
-                              <TableCell className="text-right">
-                                {currency
-                                  ? formatCurrency(Number(item.unit_price), currency)
-                                  : `$${Number(item.unit_price).toFixed(2)}`}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {currency
-                                  ? formatCurrency(Number(item.total_amount), currency)
-                                  : `$${Number(item.total_amount).toFixed(2)}`}
-                              </TableCell>
+                      {sale.sale_items && sale.sale_items.length > 0 ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Product</TableHead>
+                              <TableHead className="text-right">Qty</TableHead>
+                              <TableHead className="text-right">Unit Price</TableHead>
+                              <TableHead className="text-right">Total</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {sale.sale_items.map((item) => (
+                              <TableRow key={item.id}>
+                                <TableCell>{item.product_name}</TableCell>
+                                <TableCell className="text-right">{item.quantity}</TableCell>
+                                <TableCell className="text-right">
+                                  {currency
+                                    ? formatCurrency(Number(item.unit_price), currency)
+                                    : `$${Number(item.unit_price).toFixed(2)}`}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {currency
+                                    ? formatCurrency(Number(item.total_amount), currency)
+                                    : `$${Number(item.total_amount).toFixed(2)}`}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground text-sm">
+                          No items found for this sale
+                        </div>
+                      )}
 
                       <div className="border-t pt-3 space-y-1">
                         <div className="flex justify-between text-sm">

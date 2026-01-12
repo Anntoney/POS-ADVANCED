@@ -19,9 +19,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
 
     return (
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-screen overflow-hidden" suppressHydrationWarning>
         <Sidebar />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto" suppressHydrationWarning>{children}</main>
       </div>
     )
   } catch (error) {
