@@ -42,6 +42,7 @@ const FEATURES = [
   { id: "products", name: "Products" },
   { id: "categories", name: "Categories" },
   { id: "stock", name: "Stock" },
+  { id: "stock_transfer", name: "Stock Transfer" },
   { id: "sales", name: "Sales" },
   { id: "purchases", name: "Purchases" },
   { id: "returns", name: "Returns" },
