@@ -267,20 +267,33 @@ export function POSInterface({
     const total = calculateTotal()
     const totalPaid = calculateTotalPaid()
     const hasCreditPayment = payments.some((p) => p.method === "credit")
+    const isWalkInCustomer = !selectedCustomer || selectedCustomer === ""
     
-    if (hasCreditPayment) {
-      if (!selectedCustomer) {
-        alert("Please select a customer for credit sales")
-        return
-      }
-    }
-
     // Validate payment amounts
     for (const payment of payments) {
       const amount = Number.parseFloat(payment.amount) || 0
       if (amount < 0) {
         alert("Invalid payment amount")
-      return
+        return
+      }
+    }
+
+    // For walk-in customers: amount paid must be greater than zero and cannot be less than total
+    if (isWalkInCustomer) {
+      if (totalPaid === 0) {
+        alert("If it's credit, choose customer name. If not, enter paid amount in amount section.")
+        return
+      }
+      if (totalPaid < total) {
+        alert("Amount paid cannot be less than total amount for walk-in customers. Please enter the full amount or select a customer for credit sales.")
+        return
+      }
+    }
+    
+    if (hasCreditPayment) {
+      if (!selectedCustomer) {
+        alert("Please select a customer for credit sales")
+        return
       }
     }
 
