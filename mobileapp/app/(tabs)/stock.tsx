@@ -28,6 +28,8 @@ export default function StockScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all');
   const [storeModalVisible, setStoreModalVisible] = useState(false);
+  const [canAccessAllStores, setCanAccessAllStores] = useState(false);
+  const [userStoreId, setUserStoreId] = useState<string | null>(null);
   const [stockAdjustModalVisible, setStockAdjustModalVisible] = useState(false);
   const [newProductModalVisible, setNewProductModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -44,6 +46,35 @@ export default function StockScreen() {
   const [newProductMinStock, setNewProductMinStock] = useState<string>('10');
   const [newProductStoreId, setNewProductStoreId] = useState<string>('');
   const [isCreating, setIsCreating] = useState(false);
+
+  const loadUserContext = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, store_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        const admin = profile.role === 'admin';
+        const storeId = profile.store_id || null;
+        const canAccessAll = admin && !storeId;
+        
+        setCanAccessAllStores(canAccessAll);
+        setUserStoreId(storeId);
+        
+        // For non-admins, set their store as default
+        if (!canAccessAll && storeId) {
+          setSelectedStoreId(storeId);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user context:', error);
+    }
+  };
 
   const loadStores = async () => {
     try {
@@ -67,8 +98,14 @@ export default function StockScreen() {
         .select('*')
         .order('stock_quantity', { ascending: true });
 
-      if (selectedStoreId) {
-        query = query.eq('store_id', selectedStoreId);
+      // For admins, filter by selected store if one is selected
+      // For non-admins, always filter by their assigned store
+      if (canAccessAllStores) {
+        if (selectedStoreId) {
+          query = query.eq('store_id', selectedStoreId);
+        }
+      } else if (userStoreId) {
+        query = query.eq('store_id', userStoreId);
       }
 
       const { data, error } = await query;
@@ -85,9 +122,15 @@ export default function StockScreen() {
   };
 
   useEffect(() => {
+    loadUserContext();
     loadStores();
-    loadProducts();
   }, []);
+
+  useEffect(() => {
+    if (stores.length > 0) {
+      loadProducts();
+    }
+  }, [selectedStoreId, canAccessAllStores, userStoreId]);
 
   useEffect(() => {
     if (stores.length > 0) {
@@ -399,18 +442,20 @@ export default function StockScreen() {
 
   return (
     <View style={stylesWithTheme.container}>
-      <View style={styles.storeFilterContainer}>
-        <TouchableOpacity
-          style={[styles.storeFilterButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => setStoreModalVisible(true)}
-        >
-          <Text style={{ fontSize: 18, marginRight: 8 }}>🏪</Text>
-          <Text style={[styles.storeFilterText, { color: colors.text }]}>
-            {selectedStore ? selectedStore.name : 'All Shops'}
-          </Text>
-          <Text style={{ fontSize: 16, color: colors.textSecondary }}>▼</Text>
-        </TouchableOpacity>
-      </View>
+      {canAccessAllStores && stores.length > 0 && (
+        <View style={styles.storeFilterContainer}>
+          <TouchableOpacity
+            style={[styles.storeFilterButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={() => setStoreModalVisible(true)}
+          >
+            <Text style={{ fontSize: 18, marginRight: 8 }}>🏪</Text>
+            <Text style={[styles.storeFilterText, { color: colors.text }]}>
+              {selectedStore ? selectedStore.name : 'All Shops'}
+            </Text>
+            <Text style={{ fontSize: 16, color: colors.textSecondary }}>▼</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Total Values Summary */}
       <View style={styles.summaryContainer}>

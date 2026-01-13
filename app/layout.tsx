@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
+import Script from 'next/script'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -47,6 +48,38 @@ export default function RootLayout({
           {children}
         </ThemeProvider>
         <Analytics />
+        <Script
+          id="remove-extension-attributes"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                // Remove browser extension injected attributes that cause hydration errors
+                const removeExtensionAttributes = () => {
+                  const attributesToRemove = ['bis_skin_checked', 'data-new-gr-c-s-check-loaded', 'data-gr-ext-installed'];
+                  document.querySelectorAll('*').forEach((el) => {
+                    attributesToRemove.forEach((attr) => {
+                      if (el.hasAttribute(attr)) {
+                        el.removeAttribute(attr);
+                      }
+                    });
+                  });
+                };
+                
+                // Run immediately
+                removeExtensionAttributes();
+                
+                // Run after DOM is ready
+                if (document.readyState === 'loading') {
+                  document.addEventListener('DOMContentLoaded', removeExtensionAttributes);
+                }
+                
+                // Run after a short delay to catch late injections
+                setTimeout(removeExtensionAttributes, 100);
+              })();
+            `,
+          }}
+        />
       </body>
     </html>
   )
