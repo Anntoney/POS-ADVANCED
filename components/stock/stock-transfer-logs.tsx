@@ -365,13 +365,11 @@ export function StockTransferLogs({
     )
   })
 
-  if (isLoading) {
-    return <div className="text-center py-8">Loading transfer logs...</div>
-  }
-
   return (
     <>
+      <LoadingDialog isOpen={isLoading} message="Loading transfer logs..." />
       <LoadingDialog isOpen={isCompleting} message="Completing stock transfer..." />
+      {!isLoading && (
       <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
@@ -504,5 +502,7 @@ export function StockTransferLogs({
         )}
       </CardContent>
     </Card>
+      )}
+    </>
   )
 }

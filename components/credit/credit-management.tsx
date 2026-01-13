@@ -47,6 +47,7 @@ export function CreditManagement({
   const [notes, setNotes] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const [isViewingDetails, setIsViewingDetails] = useState(false)
   const [currency, setCurrency] = useState<Currency | null>(null)
   const router = useRouter()
 
@@ -214,10 +215,14 @@ export function CreditManagement({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => router.push(`/dashboard/credit/${customer.id}`)}
+                            onClick={() => {
+                              setIsViewingDetails(true)
+                              router.push(`/dashboard/credit/${customer.id}`)
+                            }}
+                            disabled={isViewingDetails}
                           >
                             <Eye className="h-4 w-4 mr-1" />
-                            View Details
+                            {isViewingDetails ? "Loading..." : "View Details"}
                           </Button>
                           <Dialog
                             open={isOpen && selectedCustomer?.id === customer.id}
@@ -317,6 +322,7 @@ export function CreditManagement({
         </CardContent>
       </Card>
     </div>
+    <LoadingDialog isOpen={isViewingDetails} message="Loading credit details..." />
     </>
   )
 }
