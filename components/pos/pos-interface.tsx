@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Minus, Plus, ShoppingCart, Trash2, AlertCircle, X, Edit } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { LoadingDialog } from "@/components/ui/loading-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
@@ -410,7 +411,9 @@ export function POSInterface({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 md:p-6">
+    <>
+      <LoadingDialog isOpen={isProcessing} message="Processing sale..." />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 md:p-6">
       <div className="lg:col-span-2 space-y-4">
         <div>
           <Input
@@ -803,5 +806,6 @@ export function POSInterface({
         </Card>
       </div>
     </div>
+    </>
   )
 }

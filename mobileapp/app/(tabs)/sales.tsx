@@ -294,7 +294,22 @@ export default function SalesScreen() {
   const selectedStore = stores.find((s) => s.id === selectedStoreId);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <>
+      <Modal
+        visible={loading || calculatingGross}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.loadingModal, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.text }]}>
+              {calculatingGross ? 'Calculating profit...' : 'Loading sales...'}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.filterRow}>
         <TouchableOpacity
           style={[styles.filterButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -599,6 +614,7 @@ export default function SalesScreen() {
         </View>
       </Modal>
     </View>
+    </>
   );
 }
 
@@ -787,7 +803,20 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingModal: {
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 200,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '600',
   },
   modalContent: {
     backgroundColor: '#fff',

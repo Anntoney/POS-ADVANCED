@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { LoadingDialog } from "@/components/ui/loading-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -101,7 +102,9 @@ export function StockAdjustmentForm({ products }: { products: Product[] }) {
   }
 
   return (
-    <Card className="max-w-2xl">
+    <>
+      <LoadingDialog isOpen={isLoading} message="Saving stock adjustment..." />
+      <Card className="max-w-2xl">
       <CardHeader>
         <CardTitle>Stock Adjustment</CardTitle>
         <CardDescription>Add or remove stock from your inventory</CardDescription>
@@ -186,5 +189,6 @@ export function StockAdjustmentForm({ products }: { products: Product[] }) {
         </form>
       </CardContent>
     </Card>
+    </>
   )
 }

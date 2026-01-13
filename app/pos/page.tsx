@@ -2,8 +2,7 @@ import { Header } from "@/components/dashboard/header"
 import { POSInterface } from "@/components/pos/pos-interface"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { PermissionGuard } from "@/components/dashboard/permission-guard"
-import { getUserStoreContext } from "@/lib/utils/store-context"
+import { hasPermission, type Feature } from "@/lib/utils/permissions"
 
 export default async function POSPage() {
   const supabase = await createClient()
@@ -16,8 +15,27 @@ export default async function POSPage() {
     redirect("/auth/login")
   }
 
-  const storeContext = await getUserStoreContext(user.id)
+  // Get profile and permissions in parallel to optimize performance
+  const [profileResult, permissionsResult] = await Promise.all([
+    supabase.from("profiles").select("store_id, role").eq("id", user.id).single(),
+    supabase.from("user_permissions").select("feature, can_access").eq("user_id", user.id),
+  ])
 
+  const profile = profileResult.data
+  const isAdmin = profile?.role === "admin"
+  const storeId = profile?.store_id || null
+  const canAccessAllStores = isAdmin && !storeId
+
+  // Check permissions - admins have access to everything
+  if (!isAdmin) {
+    const permissions = permissionsResult.data || []
+    const posPermission = permissions.find((p) => p.feature === "pos")
+    if (!posPermission || !posPermission.can_access) {
+      redirect("/dashboard")
+    }
+  }
+
+  // Build queries based on store context
   let productsQuery = supabase
     .from("products")
     .select(`
@@ -30,24 +48,23 @@ export default async function POSPage() {
   let customersQuery = supabase.from("customers").select("id, name, email, balance")
 
   // Filter by store if user is assigned to a store
-  if (!storeContext.canAccessAllStores && storeContext.storeId) {
-    productsQuery = productsQuery.eq("store_id", storeContext.storeId)
-    customersQuery = customersQuery.eq("store_id", storeContext.storeId)
+  if (!canAccessAllStores && storeId) {
+    productsQuery = productsQuery.eq("store_id", storeId)
+    customersQuery = customersQuery.eq("store_id", storeId)
   }
 
+  // Fetch data in parallel
   const [{ data: products }, { data: customers }] = await Promise.all([
     productsQuery.order("name"),
     customersQuery.order("name"),
   ])
 
   return (
-    <PermissionGuard feature="pos">
-      <div className="min-h-screen flex flex-col">
-        <Header title="Point of Sale" showMenu />
-        <div className="flex-1 overflow-y-auto">
-          <POSInterface products={products || []} customers={customers || []} userId={user.id} />
-        </div>
+    <div className="min-h-screen flex flex-col">
+      <Header title="Point of Sale" showMenu />
+      <div className="flex-1 overflow-y-auto">
+        <POSInterface products={products || []} customers={customers || []} userId={user.id} />
       </div>
-    </PermissionGuard>
+    </div>
   )
 }

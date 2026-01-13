@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { CreditCard, DollarSign, Eye } from "lucide-react"
+import { LoadingDialog } from "@/components/ui/loading-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
@@ -131,7 +132,9 @@ export function CreditManagement({
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <LoadingDialog isOpen={isProcessing} message="Processing payment..." />
+      <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -314,5 +317,6 @@ export function CreditManagement({
         </CardContent>
       </Card>
     </div>
+    </>
   )
 }

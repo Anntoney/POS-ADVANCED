@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { LoadingDialog } from "@/components/ui/loading-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Package, List, Search, X } from "lucide-react"
@@ -200,7 +201,9 @@ export function StockTransferForm({
   }
 
   return (
-    <Card>
+    <>
+      <LoadingDialog isOpen={isSubmitting} message="Creating stock transfer..." />
+      <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -376,5 +379,6 @@ export function StockTransferForm({
         </form>
       </CardContent>
     </Card>
+    </>
   )
 }

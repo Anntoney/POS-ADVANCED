@@ -441,7 +441,22 @@ export default function StockScreen() {
   });
 
   return (
-    <View style={stylesWithTheme.container}>
+    <>
+      <Modal
+        visible={isAdjusting || isCreating}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.loadingModal, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.text }]}>
+              {isAdjusting ? 'Adjusting stock...' : isCreating ? 'Creating product...' : 'Processing...'}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+      <View style={stylesWithTheme.container}>
       {canAccessAllStores && stores.length > 0 && (
         <View style={styles.storeFilterContainer}>
           <TouchableOpacity
@@ -1194,5 +1209,17 @@ const styles = StyleSheet.create({
   },
   storeSelectText: {
     fontSize: 14,
+  },
+  loadingModal: {
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 200,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

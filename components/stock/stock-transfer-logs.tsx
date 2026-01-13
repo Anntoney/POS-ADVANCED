@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation"
 import { Check, X, Package, RefreshCw, Plus, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
+import { LoadingDialog } from "@/components/ui/loading-dialog"
 import type { StockTransfer, Store, Product } from "@/lib/types/database"
 
 type StockTransferWithRelations = StockTransfer & {
@@ -32,6 +33,7 @@ export function StockTransferLogs({
 }) {
   const [transfers, setTransfers] = useState<StockTransferWithRelations[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isCompleting, setIsCompleting] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const router = useRouter()
 
@@ -75,6 +77,7 @@ export function StockTransferLogs({
       return
     }
 
+    setIsCompleting(true)
     try {
       const supabase = createClient()
 
@@ -272,6 +275,8 @@ export function StockTransferLogs({
     } catch (error: any) {
       console.error("Error completing transfer:", error)
       alert(`Error completing transfer: ${error.message || "An unexpected error occurred"}`)
+    } finally {
+      setIsCompleting(false)
     }
   }
 
@@ -365,7 +370,9 @@ export function StockTransferLogs({
   }
 
   return (
-    <Card>
+    <>
+      <LoadingDialog isOpen={isCompleting} message="Completing stock transfer..." />
+      <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
           <div>
