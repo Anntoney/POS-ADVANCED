@@ -20,30 +20,12 @@ export default async function StockPage() {
   try {
     const storeContext = await getUserStoreContext(user.id)
     
-    // Fetch all stores for the filter (only needed for admins, but we'll fetch it anyway)
+    // Fetch all stores for the filter
     const { data: stores } = await supabase
       .from("stores")
       .select("*")
       .eq("is_active", true)
       .order("name")
-    
-    let productsQuery = supabase
-      .from("products")
-      .select(
-        `
-        *,
-        categories (name),
-        units (short_name)
-      `,
-      )
-
-    // For admins, fetch all products (they can filter by shop using the dropdown)
-    // For non-admins, filter by their assigned store
-    if (!storeContext.canAccessAllStores && storeContext.storeId) {
-      productsQuery = productsQuery.eq("store_id", storeContext.storeId)
-    }
-
-    const { data: products } = await productsQuery.order("stock_quantity", { ascending: true })
 
     return (
       <div suppressHydrationWarning>
@@ -74,9 +56,9 @@ export default async function StockPage() {
             </div>
           </div>
           <StockTable 
-            products={products || []} 
             stores={stores || []}
             canAccessAllStores={storeContext.canAccessAllStores}
+            userStoreId={storeContext.storeId}
           />
         </div>
       </div>

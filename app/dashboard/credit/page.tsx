@@ -46,6 +46,7 @@ export default async function CreditPage() {
             customers={customers || []} 
             canAccessAllStores={storeContext.canAccessAllStores}
             stores={allStores || []}
+            userStoreId={storeContext.storeId}
           />
         </div>
       </div>

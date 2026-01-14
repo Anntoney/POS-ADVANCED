@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Calendar, Download, Filter, RefreshCw } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
+import { LoadingDialog } from "@/components/ui/loading-dialog"
 
 type SalesReportData = {
   product_name: string
@@ -35,7 +36,7 @@ export function SalesReport() {
     return new Date().toISOString().split("T")[0]
   })
   const [paymentFilter, setPaymentFilter] = useState<string>("all")
-  const [storeFilter, setStoreFilter] = useState<string>("all")
+  const [storeFilter, setStoreFilter] = useState<string>("")
   const [stores, setStores] = useState<Array<{ id: string; name: string }>>([])
   const [reportData, setReportData] = useState<SalesReportData[]>([])
   const [paymentSummaries, setPaymentSummaries] = useState<PaymentMethodSummary[]>([])
@@ -44,22 +45,45 @@ export function SalesReport() {
   const [totalExpenses, setTotalExpenses] = useState(0)
   const [currency, setCurrency] = useState<Currency | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingStores, setIsLoadingStores] = useState(false)
 
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
-    // Load stores
-    const supabase = createClient()
-    supabase
-      .from("stores")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("name")
-      .then(({ data }) => {
-        if (data) {
-          setStores(data as Array<{ id: string; name: string }>)
-        }
-      })
+    loadStores()
   }, [])
+
+  // Auto-fetch data when store is selected
+  useEffect(() => {
+    if (storeFilter) {
+      fetchReportData()
+    } else {
+      // Clear data when no store is selected
+      setReportData([])
+      setPaymentSummaries([])
+      setTotalSales(0)
+      setTotalGross(0)
+      setTotalExpenses(0)
+    }
+  }, [storeFilter])
+
+  const loadStores = async () => {
+    setIsLoadingStores(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("stores")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name")
+
+      if (error) throw error
+      setStores(data as Array<{ id: string; name: string }> || [])
+    } catch (error) {
+      console.error("Error loading stores:", error)
+    } finally {
+      setIsLoadingStores(false)
+    }
+  }
 
   const fetchReportData = async () => {
     setIsLoading(true)
@@ -73,14 +97,137 @@ export function SalesReport() {
         .gte("sale_date", `${startDate}T00:00:00`)
         .lte("sale_date", `${endDate}T23:59:59`)
 
-      // Filter by store if specified
-      if (storeFilter !== "all") {
+      // Filter by store - storeFilter is mandatory, so it should always have a value
+      if (storeFilter === "all") {
+        // Show all stores - don't filter by store_id (include all sales regardless of store_id)
+      } else if (storeFilter) {
+        // Filter by specific store - must match exactly
+        // Note: .eq() already excludes NULL values, so we don't need .not()
         salesQuery = salesQuery.eq("store_id", storeFilter)
+      } else {
+        // No store selected - return empty
+        setReportData([])
+        setPaymentSummaries([])
+        setTotalSales(0)
+        setTotalGross(0)
+        setTotalExpenses(0)
+        setIsLoading(false)
+        return
       }
 
-      const { data: sales, error: salesError } = await salesQuery
+      let { data: sales, error: salesError } = await salesQuery
 
-      if (salesError) throw salesError
+      if (salesError) {
+        console.error("Sales query error:", salesError)
+        alert(`Error loading sales: ${salesError.message}`)
+        setIsLoading(false)
+        return
+      }
+      
+      // Debug: Check what store_ids actually exist in sales for this date range
+      if (storeFilter && storeFilter !== "all" && (!sales || sales.length === 0)) {
+        // Query all sales in date range to see what store_ids exist
+        const { data: allSalesInRange } = await supabase
+          .from("sales")
+          .select("id, store_id, sale_date, created_by")
+          .gte("sale_date", `${startDate}T00:00:00`)
+          .lte("sale_date", `${endDate}T23:59:59`)
+        
+        const uniqueStoreIds = [...new Set(allSalesInRange?.map((s: any) => s.store_id).filter((id: any) => id !== null && id !== undefined) || [])]
+        const nullStoreIdCount = allSalesInRange?.filter((s: any) => s.store_id === null || s.store_id === undefined).length || 0
+        
+        console.log("Sales Report Debug - No sales found for store:", {
+          selectedStoreFilter: storeFilter,
+          dateRange: { startDate, endDate },
+          totalSalesInDateRange: allSalesInRange?.length || 0,
+          uniqueStoreIdsInRange: uniqueStoreIds,
+          salesWithNullStoreId: nullStoreIdCount,
+          sampleSales: allSalesInRange?.slice(0, 5).map((s: any) => ({ 
+            id: s.id, 
+            store_id: s.store_id, 
+            sale_date: s.sale_date,
+            created_by: s.created_by
+          }))
+        })
+        
+        // If all sales have NULL store_id, try to assign them based on the creator's store
+        if (nullStoreIdCount > 0 && uniqueStoreIds.length === 0) {
+          console.warn(`Warning: ${nullStoreIdCount} sales in this date range have NULL store_id. Attempting to assign store based on creator...`)
+          
+          // Get unique creator IDs from sales with NULL store_id
+          const creatorIds = [...new Set(allSalesInRange?.filter((s: any) => !s.store_id && s.created_by).map((s: any) => s.created_by) || [])]
+          
+          if (creatorIds.length > 0) {
+            // Get store_id for each creator from profiles
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select("id, store_id")
+              .in("id", creatorIds)
+            
+            // Create a map of creator_id -> store_id
+            const creatorStoreMap = new Map()
+            profiles?.forEach((p: any) => {
+              if (p.store_id) {
+                creatorStoreMap.set(p.id, p.store_id)
+              }
+            })
+            
+            // Get default store if creator doesn't have a store
+            const { data: defaultStore } = await supabase
+              .from("stores")
+              .select("id")
+              .eq("is_active", true)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .single()
+            
+            const defaultStoreId = defaultStore?.id || storeFilter
+            
+            // Update sales with NULL store_id based on creator's store, or default store
+            const salesToUpdate = allSalesInRange?.filter((s: any) => !s.store_id && s.created_by) || []
+            
+            for (const sale of salesToUpdate) {
+              const assignedStoreId = creatorStoreMap.get(sale.created_by) || defaultStoreId
+              
+              await supabase
+                .from("sales")
+                .update({ store_id: assignedStoreId })
+                .eq("id", sale.id)
+            }
+            
+            console.log(`Updated ${salesToUpdate.length} sales with store_id based on creator's store`)
+            
+            // Re-query sales with the updated store_id
+            const updatedSalesQuery = supabase
+              .from("sales")
+              .select("id, sale_date, total_amount, subtotal, store_id, payment_status, amount_paid")
+              .gte("sale_date", `${startDate}T00:00:00`)
+              .lte("sale_date", `${endDate}T23:59:59`)
+              .eq("store_id", storeFilter)
+            
+            const { data: updatedSales, error: updatedError } = await updatedSalesQuery
+            
+            if (!updatedError && updatedSales && updatedSales.length > 0) {
+              // Use the updated sales
+              sales = updatedSales
+              console.log(`Found ${updatedSales.length} sales after updating store_id`)
+            }
+          }
+        }
+      } else {
+        // Debug: Log sales count and store filter for troubleshooting
+        console.log("Sales Report Debug:", {
+          storeFilter,
+          salesCount: sales?.length || 0,
+          dateRange: { startDate, endDate },
+          sampleSales: sales?.slice(0, 3).map((s: any) => ({ 
+            id: s.id, 
+            store_id: s.store_id, 
+            sale_date: s.sale_date,
+            total_amount: s.total_amount 
+          }))
+        })
+      }
 
       if (!sales || sales.length === 0) {
         setReportData([])
@@ -104,9 +251,27 @@ export function SalesReport() {
       if (paymentsError) throw paymentsError
 
       // Fetch credit payments (customer_payments) made in the date range
-      // First get customer IDs based on store filter if needed
+      // Now that customer_payments has store_id, we can filter directly by store
+      let creditPayments: any[] = []
+      
+      let creditPaymentsQuery = supabase
+        .from("customer_payments")
+        .select("payment_method, amount, payment_date, customer_id, store_id")
+        .gte("payment_date", `${startDate}T00:00:00`)
+        .lte("payment_date", `${endDate}T23:59:59`)
+
+      // Filter by store_id directly if specific store is selected
+      if (storeFilter && storeFilter !== "all") {
+        creditPaymentsQuery = creditPaymentsQuery.eq("store_id", storeFilter)
+      }
+
+      const { data: creditPaymentsData, error: creditPaymentsError } = await creditPaymentsQuery
+      if (creditPaymentsError) throw creditPaymentsError
+      creditPayments = creditPaymentsData || []
+      
+      // Get customer IDs for credit sales filtering (still needed for credit sales query)
       let customerIdsForStore: string[] | null = null
-      if (storeFilter !== "all") {
+      if (storeFilter && storeFilter !== "all") {
         const { data: customersInStore, error: customersError } = await supabase
           .from("customers")
           .select("id")
@@ -114,26 +279,6 @@ export function SalesReport() {
         
         if (customersError) throw customersError
         customerIdsForStore = customersInStore?.map(c => c.id) || []
-      }
-
-      // Fetch credit payments - filter by customer IDs if store filter is set
-      let creditPayments: any[] = []
-      
-      if (customerIdsForStore === null || (customerIdsForStore && customerIdsForStore.length > 0)) {
-        let creditPaymentsQuery = supabase
-          .from("customer_payments")
-          .select("payment_method, amount, payment_date, customer_id")
-          .gte("payment_date", `${startDate}T00:00:00`)
-          .lte("payment_date", `${endDate}T23:59:59`)
-
-        // Filter by store via customers if store filter is set
-        if (customerIdsForStore !== null && customerIdsForStore.length > 0) {
-          creditPaymentsQuery = creditPaymentsQuery.in("customer_id", customerIdsForStore)
-        }
-
-        const { data: creditPaymentsData, error: creditPaymentsError } = await creditPaymentsQuery
-        if (creditPaymentsError) throw creditPaymentsError
-        creditPayments = creditPaymentsData || []
       }
 
       // Extract customer IDs from credit payments
@@ -151,7 +296,7 @@ export function SalesReport() {
           .in("customer_id", customerIdsWithPayments)
           .in("payment_status", ["pending", "partial"])
 
-        if (storeFilter !== "all") {
+        if (storeFilter && storeFilter !== "all") {
           creditSalesQuery = creditSalesQuery.eq("store_id", storeFilter)
         }
 
@@ -161,15 +306,15 @@ export function SalesReport() {
         // For each customer, track payments chronologically to find which sales were cleared
         if (allCreditSales && allCreditSales.length > 0) {
           // Get all customer payments for these customers - before start date and up to end date
-          // Filter by store via customer IDs if store filter is set
+          // Filter by store_id directly if specific store is selected
           let paymentsBeforeQuery = supabase
             .from("customer_payments")
             .select("customer_id, amount")
             .in("customer_id", customerIdsWithPayments)
             .lt("payment_date", `${startDate}T00:00:00`)
 
-          if (customerIdsForStore !== null && customerIdsForStore.length > 0) {
-            paymentsBeforeQuery = paymentsBeforeQuery.in("customer_id", customerIdsForStore)
+          if (storeFilter && storeFilter !== "all") {
+            paymentsBeforeQuery = paymentsBeforeQuery.eq("store_id", storeFilter)
           }
 
           const { data: paymentsBeforeStart, error: paymentsBeforeError } = await paymentsBeforeQuery
@@ -182,8 +327,8 @@ export function SalesReport() {
             .in("customer_id", customerIdsWithPayments)
             .lte("payment_date", `${endDate}T23:59:59`)
 
-          if (customerIdsForStore !== null && customerIdsForStore.length > 0) {
-            paymentsUpToEndQuery = paymentsUpToEndQuery.in("customer_id", customerIdsForStore)
+          if (storeFilter && storeFilter !== "all") {
+            paymentsUpToEndQuery = paymentsUpToEndQuery.eq("store_id", storeFilter)
           }
 
           const { data: paymentsUpToEnd, error: paymentsUpToEndError } = await paymentsUpToEndQuery
@@ -287,7 +432,7 @@ export function SalesReport() {
         .gte("expense_date", `${startDate}T00:00:00`)
         .lte("expense_date", `${endDate}T23:59:59`)
 
-      if (storeFilter !== "all") {
+      if (storeFilter && storeFilter !== "all") {
         expensesQuery = expensesQuery.eq("store_id", storeFilter)
       }
 
@@ -506,10 +651,13 @@ export function SalesReport() {
     }
   }
 
+  // Auto-refresh when date or payment filter changes (but only if store is selected)
   useEffect(() => {
-    fetchReportData()
+    if (storeFilter) {
+      fetchReportData()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate, paymentFilter, storeFilter])
+  }, [startDate, endDate, paymentFilter])
 
   const formatPaymentMethods = (methods: string[]) => {
     return methods
@@ -541,8 +689,11 @@ export function SalesReport() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <>
+      <LoadingDialog isOpen={isLoading} message="Loading report data..." />
+      <LoadingDialog isOpen={isLoadingStores} message="Loading shops..." />
+      <div className="space-y-6">
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
@@ -572,10 +723,10 @@ export function SalesReport() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="storeFilter">Store</Label>
-              <Select value={storeFilter} onValueChange={setStoreFilter}>
+              <Label htmlFor="storeFilter">Store *</Label>
+              <Select value={storeFilter || ""} onValueChange={setStoreFilter}>
                 <SelectTrigger id="storeFilter" className="w-full">
-                  <SelectValue />
+                  <SelectValue placeholder="Select a store to view reports" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Stores</SelectItem>
@@ -586,6 +737,9 @@ export function SalesReport() {
                   ))}
                 </SelectContent>
               </Select>
+              {!storeFilter && (
+                <p className="text-sm text-muted-foreground">Please select a store to view reports</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="paymentFilter">Payment Method</Label>
@@ -794,7 +948,8 @@ export function SalesReport() {
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   )
 }
 

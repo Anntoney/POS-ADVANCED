@@ -53,17 +53,39 @@ export default async function POSPage() {
     customersQuery = customersQuery.eq("store_id", storeId)
   }
 
-  // Fetch data in parallel
-  const [{ data: products }, { data: customers }] = await Promise.all([
-    productsQuery.order("name"),
-    customersQuery.order("name"),
-  ])
+  // Fetch stores for admins
+  const { data: stores } = await supabase
+    .from("stores")
+    .select("*")
+    .eq("is_active", true)
+    .order("name")
+
+  // For non-admins, fetch data immediately
+  // For admins, we'll fetch products dynamically based on selected store
+  let initialProducts: any[] = []
+  let initialCustomers: any[] = []
+
+  if (!canAccessAllStores) {
+    const [{ data: products }, { data: customers }] = await Promise.all([
+      productsQuery.order("name"),
+      customersQuery.order("name"),
+    ])
+    initialProducts = products || []
+    initialCustomers = customers || []
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header title="Point of Sale" showMenu />
       <div className="flex-1 overflow-y-auto">
-        <POSInterface products={products || []} customers={customers || []} userId={user.id} />
+        <POSInterface 
+          products={initialProducts} 
+          customers={initialCustomers} 
+          userId={user.id}
+          canAccessAllStores={canAccessAllStores}
+          stores={stores || []}
+          userStoreId={storeId}
+        />
       </div>
     </div>
   )

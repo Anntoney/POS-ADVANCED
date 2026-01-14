@@ -40,14 +40,25 @@ type CartItem = {
   customPrice?: number // Custom selling price if edited
 }
 
+type Store = {
+  id: string
+  name: string
+}
+
 export function POSInterface({
-  products,
-  customers,
+  products: initialProducts,
+  customers: initialCustomers,
   userId,
+  canAccessAllStores = false,
+  stores = [],
+  userStoreId = null,
 }: {
   products: Product[]
   customers: Customer[]
   userId: string
+  canAccessAllStores?: boolean
+  stores?: Store[]
+  userStoreId?: string | null
 }) {
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<string>("")
@@ -56,6 +67,13 @@ export function POSInterface({
   const [isProcessing, setIsProcessing] = useState(false)
   const [currency, setCurrency] = useState<Currency | null>(null)
   const router = useRouter()
+  
+  // Store selection for admins
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(userStoreId || null)
+  const [products, setProducts] = useState<Product[]>(initialProducts)
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers)
+  const [isLoadingStores, setIsLoadingStores] = useState(false)
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
   
   // Price editing dialog state
   const [priceDialogOpen, setPriceDialogOpen] = useState(false)
@@ -74,7 +92,55 @@ export function POSInterface({
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
     loadDefaultPaymentMethod()
+    // For admins, load stores
+    if (canAccessAllStores && stores.length > 0) {
+      setIsLoadingStores(true)
+      // Stores are already passed as props, just mark as loaded
+      setTimeout(() => setIsLoadingStores(false), 100)
+    }
   }, [])
+
+  // Load products when store is selected (for admins)
+  useEffect(() => {
+    if (canAccessAllStores && selectedStoreId) {
+      loadProductsForStore(selectedStoreId)
+    }
+  }, [selectedStoreId, canAccessAllStores])
+
+  const loadProductsForStore = async (storeId: string) => {
+    setIsLoadingProducts(true)
+    try {
+      const supabase = createClient()
+      const { data: productsData, error: productsError } = await supabase
+        .from("products")
+        .select(`
+          *,
+          categories (name),
+          units (short_name)
+        `)
+        .eq("is_active", true)
+        .eq("store_id", storeId)
+        .order("name")
+
+      if (productsError) throw productsError
+
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("id, name, email, balance")
+        .eq("store_id", storeId)
+        .order("name")
+
+      if (customersError) throw customersError
+
+      setProducts(productsData || [])
+      setCustomers(customersData || [])
+    } catch (error) {
+      console.error("Error loading products for store:", error)
+      alert("Error loading products. Please try again.")
+    } finally {
+      setIsLoadingProducts(false)
+    }
+  }
 
   const loadDefaultPaymentMethod = async () => {
     try {
@@ -95,10 +161,15 @@ export function POSInterface({
     }
   }
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.sku.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  // For admins, disable search if no store is selected
+  const canSearch = !canAccessAllStores || selectedStoreId !== null
+
+  const filteredProducts = canSearch
+    ? products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.sku.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    : []
 
   const openPriceDialog = (product: Product) => {
     if (product.stock_quantity < 1) {
@@ -320,11 +391,21 @@ export function POSInterface({
       // Use first payment method as primary for backward compatibility
       const primaryPaymentMethod = payments[0]?.method || "cash"
 
+      // Determine store_id: for admins use selectedStoreId, for others use userStoreId
+      const saleStoreId = canAccessAllStores ? selectedStoreId : userStoreId
+      
+      if (!saleStoreId) {
+        alert("Store information is missing. Please select a store.")
+        setIsProcessing(false)
+        return
+      }
+
       const { data: sale, error: saleError } = await supabase
         .from("sales")
         .insert({
           sale_number: saleNumber,
           customer_id: selectedCustomer || null,
+          store_id: saleStoreId,
           subtotal,
           tax_amount: taxAmount,
           discount_amount: discountAmount,
@@ -426,14 +507,37 @@ export function POSInterface({
   return (
     <>
       <LoadingDialog isOpen={isProcessing} message="Processing sale..." />
+      <LoadingDialog isOpen={isLoadingStores} message="Loading shops..." />
+      <LoadingDialog isOpen={isLoadingProducts} message="Loading products..." />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 md:p-6">
       <div className="lg:col-span-2 space-y-4">
+        {canAccessAllStores && stores.length > 0 && (
+          <div className="space-y-2">
+            <Label htmlFor="storeSelect">Select Store *</Label>
+            <Select value={selectedStoreId || ""} onValueChange={setSelectedStoreId}>
+              <SelectTrigger id="storeSelect" className="h-12 text-lg">
+                <SelectValue placeholder="Select a store to search products" />
+              </SelectTrigger>
+              <SelectContent>
+                {stores.map((store) => (
+                  <SelectItem key={store.id} value={store.id}>
+                    {store.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!selectedStoreId && (
+              <p className="text-sm text-muted-foreground">Please select a store before searching for products</p>
+            )}
+          </div>
+        )}
         <div>
           <Input
-            placeholder="Search products by name or SKU..."
+            placeholder={canSearch ? "Search products by name or SKU..." : "Select a store first to search products"}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="h-12 text-lg"
+            disabled={!canSearch}
           />
         </div>
 

@@ -35,11 +35,13 @@ type Store = {
 export function CreditManagement({ 
   customers, 
   canAccessAllStores = false,
-  stores = []
+  stores = [],
+  userStoreId = null
 }: { 
   customers: CustomerWithStore[]
   canAccessAllStores?: boolean
   stores?: Store[]
+  userStoreId?: string | null
 }) {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [paymentAmount, setPaymentAmount] = useState("")
@@ -98,10 +100,44 @@ export function CreditManagement({
 
       const paymentNumber = `PAY-${Date.now()}`
 
-      // Record payment
+      // Determine store_id: use customer's store_id, or user's store_id, or get from user's profile
+      let paymentStoreId = selectedCustomer.store_id || userStoreId
+      
+      // If still no store_id, get from user's profile
+      if (!paymentStoreId) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("store_id")
+          .eq("id", user.id)
+          .single()
+        
+        paymentStoreId = profile?.store_id || null
+      }
+      
+      // If still no store_id, get default store
+      if (!paymentStoreId) {
+        const { data: defaultStore } = await supabase
+          .from("stores")
+          .select("id")
+          .eq("is_active", true)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .single()
+        
+        paymentStoreId = defaultStore?.id || null
+      }
+      
+      if (!paymentStoreId) {
+        alert("Unable to determine store. Please contact administrator.")
+        setIsProcessing(false)
+        return
+      }
+
+      // Record payment with store_id
       const { error: paymentError } = await supabase.from("customer_payments").insert({
         payment_number: paymentNumber,
         customer_id: selectedCustomer.id,
+        store_id: paymentStoreId,
         amount,
         payment_method: paymentMethod,
         notes: notes || null,
