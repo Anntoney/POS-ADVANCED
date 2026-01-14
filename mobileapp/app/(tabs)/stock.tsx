@@ -28,14 +28,17 @@ export default function StockScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all');
   const [storeModalVisible, setStoreModalVisible] = useState(false);
-  const [canAccessAllStores, setCanAccessAllStores] = useState(false);
+  const [canAccessAllStores, setCanAccessAllStores] = useState<boolean | undefined>(undefined);
   const [userStoreId, setUserStoreId] = useState<string | null>(null);
+  const [userContextLoaded, setUserContextLoaded] = useState(false);
   const [stockAdjustModalVisible, setStockAdjustModalVisible] = useState(false);
   const [newProductModalVisible, setNewProductModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustQuantity, setAdjustQuantity] = useState<string>('');
   const [adjustReason, setAdjustReason] = useState<string>('');
   const [isAdjusting, setIsAdjusting] = useState(false);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // New product form state
   const [newProductName, setNewProductName] = useState<string>('');
@@ -50,7 +53,13 @@ export default function StockScreen() {
   const loadUserContext = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        // If no user, set defaults to allow loading to complete
+        setCanAccessAllStores(false);
+        setUserStoreId(null);
+        setUserContextLoaded(true);
+        return;
+      }
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -70,9 +79,18 @@ export default function StockScreen() {
         if (!canAccessAll && storeId) {
           setSelectedStoreId(storeId);
         }
+      } else {
+        // If no profile found, set defaults
+        setCanAccessAllStores(false);
+        setUserStoreId(null);
       }
     } catch (error) {
       console.error('Error loading user context:', error);
+      // Set defaults on error to prevent infinite loading
+      setCanAccessAllStores(false);
+      setUserStoreId(null);
+    } finally {
+      setUserContextLoaded(true);
     }
   };
 
@@ -91,8 +109,16 @@ export default function StockScreen() {
     }
   };
 
-  const loadProducts = async () => {
+  const loadProducts = async (showLoading = false) => {
+    if (showLoading) {
+      setIsLoadingProducts(true);
+    }
     try {
+      // Don't try to load if user context hasn't loaded yet
+      if (!userContextLoaded) {
+        return;
+      }
+
       let query = supabase
         .from('products')
         .select('*')
@@ -100,11 +126,11 @@ export default function StockScreen() {
 
       // For admins, filter by selected store if one is selected
       // For non-admins, always filter by their assigned store
-      if (canAccessAllStores) {
+      if (canAccessAllStores === true) {
         if (selectedStoreId) {
           query = query.eq('store_id', selectedStoreId);
         }
-      } else if (userStoreId) {
+      } else if (canAccessAllStores === false && userStoreId) {
         query = query.eq('store_id', userStoreId);
       }
 
@@ -115,26 +141,44 @@ export default function StockScreen() {
       setProducts(data || []);
     } catch (error) {
       console.error('Error loading stock:', error);
+      // Set empty array on error to prevent infinite loading
+      setProducts([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setIsLoadingProducts(false);
     }
   };
 
   useEffect(() => {
-    loadUserContext();
-    loadStores();
+    const initialize = async () => {
+      await loadUserContext();
+      await loadStores();
+    };
+    initialize();
   }, []);
 
   useEffect(() => {
-    if (stores.length > 0) {
+    // Wait for user context to be loaded first
+    if (!userContextLoaded) return;
+
+    // For non-admins, load products once userStoreId is set (even if stores array is empty)
+    // For admins, wait for stores to load first
+    if (canAccessAllStores === true) {
+      if (stores.length > 0) {
+        loadProducts();
+      }
+    } else if (canAccessAllStores === false) {
+      // Non-admin: load products immediately when userStoreId is available (even if null)
       loadProducts();
     }
-  }, [selectedStoreId, canAccessAllStores, userStoreId]);
+  }, [userContextLoaded, canAccessAllStores, userStoreId, stores.length]);
 
   useEffect(() => {
-    if (stores.length > 0) {
-      loadProducts();
+    // Only show loading dialog when switching shops (selectedStoreId changes after initial load)
+    // Don't trigger on initial null -> userStoreId transition
+    if (stores.length > 0 && selectedStoreId !== null && canAccessAllStores) {
+      loadProducts(true);
     }
   }, [selectedStoreId]);
 
@@ -144,13 +188,27 @@ export default function StockScreen() {
   };
 
   const getFilteredProducts = () => {
+    let filtered = products;
+
+    // Apply search filter
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(query) ||
+          p.sku?.toLowerCase().includes(query) ||
+          p.barcode?.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply stock filter
     if (filter === 'low') {
-      return products.filter((p) => p.stock_quantity <= p.min_stock_level && p.stock_quantity > 0);
+      filtered = filtered.filter((p) => p.stock_quantity <= p.min_stock_level && p.stock_quantity > 0);
+    } else if (filter === 'out') {
+      filtered = filtered.filter((p) => p.stock_quantity === 0);
     }
-    if (filter === 'out') {
-      return products.filter((p) => p.stock_quantity === 0);
-    }
-    return products;
+
+    return filtered;
   };
 
   const getStockStatus = (product: Product) => {
@@ -456,6 +514,23 @@ export default function StockScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Loading Dialog for Shop Switching */}
+      <Modal
+        visible={isLoadingProducts}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.loadingModal, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.text }]}>
+              Loading products...
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       <View style={stylesWithTheme.container}>
       {canAccessAllStores && stores.length > 0 && (
         <View style={styles.storeFilterContainer}>
@@ -471,6 +546,23 @@ export default function StockScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.searchIcon, { color: colors.textSecondary }]}>🔍</Text>
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Search products..."
+          placeholderTextColor={colors.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Text style={{ fontSize: 20, color: colors.textSecondary }}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Total Values Summary */}
       <View style={styles.summaryContainer}>
@@ -865,6 +957,7 @@ export default function StockScreen() {
         </View>
       </Modal>
     </View>
+    </>
   );
 }
 
@@ -880,6 +973,24 @@ const styles = StyleSheet.create({
   storeFilterContainer: {
     padding: 16,
     paddingBottom: 8,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  searchIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
   },
   storeFilterButton: {
     flexDirection: 'row',

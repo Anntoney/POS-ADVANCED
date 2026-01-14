@@ -24,13 +24,47 @@ export default function ProductsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [canAccessAllStores, setCanAccessAllStores] = useState(false);
+  const [userStoreId, setUserStoreId] = useState<string | null>(null);
+
+  const loadUserContext = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, store_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        const admin = profile.role === 'admin';
+        const storeId = profile.store_id || null;
+        const canAccessAll = admin && !storeId;
+        
+        setCanAccessAllStores(canAccessAll);
+        setUserStoreId(storeId);
+      }
+    } catch (error) {
+      console.error('Error loading user context:', error);
+    }
+  };
 
   const loadProducts = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // For admins without a store, show all products
+      // For non-admins or admins with a store, filter by their store
+      if (!canAccessAllStores && userStoreId) {
+        query = query.eq('store_id', userStoreId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -38,6 +72,9 @@ export default function ProductsScreen() {
       setFilteredProducts(data || []);
     } catch (error) {
       console.error('Error loading products:', error);
+      // Set empty arrays on error to prevent infinite loading
+      setProducts([]);
+      setFilteredProducts([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -45,8 +82,17 @@ export default function ProductsScreen() {
   };
 
   useEffect(() => {
-    loadProducts();
+    const initialize = async () => {
+      await loadUserContext();
+    };
+    initialize();
   }, []);
+
+  useEffect(() => {
+    if (userStoreId !== null || canAccessAllStores) {
+      loadProducts();
+    }
+  }, [canAccessAllStores, userStoreId]);
 
   useEffect(() => {
     if (searchQuery.trim() === '') {
@@ -173,7 +219,6 @@ export default function ProductsScreen() {
         }
       />
     </View>
-    </>
   );
 }
 
