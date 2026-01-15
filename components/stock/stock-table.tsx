@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -58,6 +58,12 @@ export function StockTable({
   const [currency, setCurrency] = useState<Currency | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  // Product name editing dialog state
+  const [nameDialogOpen, setNameDialogOpen] = useState(false)
+  const [editedName, setEditedName] = useState<string>("")
+  const [isSavingName, setIsSavingName] = useState(false)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+  const scrollbarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
@@ -67,6 +73,45 @@ export function StockTable({
       loadProducts(userStoreId)
     }
   }, [])
+
+  // Sync scroll between table and scrollbar
+  useEffect(() => {
+    const tableContainer = tableContainerRef.current
+    const scrollbar = scrollbarRef.current
+
+    if (!tableContainer || !scrollbar) return
+
+    const handleTableScroll = () => {
+      scrollbar.scrollLeft = tableContainer.scrollLeft
+    }
+
+    const handleScrollbarScroll = () => {
+      tableContainer.scrollLeft = scrollbar.scrollLeft
+    }
+
+    tableContainer.addEventListener('scroll', handleTableScroll)
+    scrollbar.addEventListener('scroll', handleScrollbarScroll)
+
+    // Set scrollbar width to match table width
+    const updateScrollbarWidth = () => {
+      if (tableContainer.scrollWidth > tableContainer.clientWidth) {
+        const scrollbarContent = scrollbar.querySelector('div') as HTMLElement
+        if (scrollbarContent) {
+          scrollbarContent.style.width = `${tableContainer.scrollWidth}px`
+        }
+      }
+    }
+
+    updateScrollbarWidth()
+    const resizeObserver = new ResizeObserver(updateScrollbarWidth)
+    resizeObserver.observe(tableContainer)
+
+    return () => {
+      tableContainer.removeEventListener('scroll', handleTableScroll)
+      scrollbar.removeEventListener('scroll', handleScrollbarScroll)
+      resizeObserver.disconnect()
+    }
+  }, [products, searchQuery])
 
   // Load products when store is selected
   useEffect(() => {
@@ -134,6 +179,50 @@ export function StockTable({
       : product.wholesale_price || 0
     setEditedPrice(currentPrice.toString())
     setPriceDialogOpen(true)
+  }
+
+  const handleEditName = (product: ProductStock) => {
+    setSelectedProduct(product)
+    setEditedName(product.name)
+    setNameDialogOpen(true)
+  }
+
+  const handleSaveName = async () => {
+    if (!selectedProduct) return
+
+    const newName = editedName.trim()
+    if (!newName) {
+      alert("Product name cannot be empty")
+      return
+    }
+
+    setIsSavingName(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("products")
+        .update({ name: newName })
+        .eq("id", selectedProduct.id)
+
+      if (error) throw error
+
+      // Update local state
+      setProducts(products.map(p => 
+        p.id === selectedProduct.id 
+          ? { ...p, name: newName }
+          : p
+      ))
+
+      setNameDialogOpen(false)
+      setSelectedProduct(null)
+      setEditedName("")
+      router.refresh()
+      alert("Product name updated successfully!")
+    } catch (error: any) {
+      alert(`Error updating product name: ${error.message}`)
+    } finally {
+      setIsSavingName(false)
+    }
   }
 
   const handleSavePrice = async () => {
@@ -259,6 +348,7 @@ export function StockTable({
     <>
       <LoadingDialog isOpen={isLoading} message="Loading products..." />
       <LoadingDialog isOpen={isSavingPrice} message="Saving price..." />
+      <LoadingDialog isOpen={isSavingName} message="Saving product name..." />
       <LoadingDialog isOpen={isDeleting} message="Deleting product..." />
       <div className="mb-4 space-y-4" suppressHydrationWarning>
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
@@ -302,8 +392,13 @@ export function StockTable({
       </div>
 
       {selectedStoreId && (
-        <div className="rounded-md border overflow-x-auto" suppressHydrationWarning>
-          <Table>
+        <div className="relative" suppressHydrationWarning>
+          <div 
+            ref={tableContainerRef}
+            className="rounded-md border overflow-x-auto" 
+            suppressHydrationWarning
+          >
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Product Name</TableHead>
@@ -329,7 +424,20 @@ export function StockTable({
 
                   return (
                     <TableRow key={product.id}>
-                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{product.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleEditName(product)}
+                            title="Edit product name"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <span>
@@ -429,6 +537,15 @@ export function StockTable({
               )}
             </TableBody>
           </Table>
+          </div>
+          {/* Sticky horizontal scrollbar - always visible at bottom */}
+          <div 
+            ref={scrollbarRef}
+            className="sticky bottom-0 left-0 right-0 h-[17px] overflow-x-auto overflow-y-hidden bg-background border-t z-10"
+            suppressHydrationWarning
+          >
+            <div style={{ height: '1px', width: '200%' }}></div>
+          </div>
         </div>
       )}
 
@@ -462,6 +579,43 @@ export function StockTable({
             </Button>
             <Button variant="destructive" onClick={handleDeleteProduct} disabled={isDeleting}>
               {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Name Edit Dialog */}
+      <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product Name</DialogTitle>
+            <DialogDescription>
+              Update the product name for {selectedProduct?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="nameInput">Product Name</Label>
+              <Input
+                id="nameInput"
+                type="text"
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                placeholder="Enter product name"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isSavingName) {
+                    handleSaveName()
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNameDialogOpen(false)} disabled={isSavingName}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveName} disabled={isSavingName || !editedName.trim()}>
+              {isSavingName ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
