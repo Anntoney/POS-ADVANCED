@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle, History, Plus, Minus, Search, Edit, Trash2 } from "lucide-react"
+import { History, Plus, Minus, Search, Edit, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { QuickStockAdjustDialog } from "./quick-stock-adjust-dialog"
 import { LoadingDialog } from "@/components/ui/loading-dialog"
@@ -420,7 +420,6 @@ export function StockTable({
               ) : (
                 filteredProducts.map((product) => {
                   const status = getStockStatus(product.stock_quantity)
-                  const isLowStock = product.stock_quantity <= 10
 
                   return (
                     <TableRow key={product.id}>
@@ -443,7 +442,6 @@ export function StockTable({
                           <span>
                             {product.stock_quantity} {product.units?.short_name || ""}
                           </span>
-                          {isLowStock && <AlertTriangle className="h-4 w-4 text-orange-500" />}
                           <div className="flex items-center gap-1 ml-2">
                             <Button
                               variant="outline"
