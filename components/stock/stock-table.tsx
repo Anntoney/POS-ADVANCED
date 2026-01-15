@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle, History, Plus, Minus, Search, Edit } from "lucide-react"
+import { AlertTriangle, History, Plus, Minus, Search, Edit, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { QuickStockAdjustDialog } from "./quick-stock-adjust-dialog"
 import { LoadingDialog } from "@/components/ui/loading-dialog"
@@ -56,6 +56,8 @@ export function StockTable({
   const [editedPrice, setEditedPrice] = useState<string>("")
   const [isSavingPrice, setIsSavingPrice] = useState(false)
   const [currency, setCurrency] = useState<Currency | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
@@ -190,6 +192,42 @@ export function StockTable({
     }
   }
 
+  const handleDeleteClick = (product: ProductStock) => {
+    setSelectedProduct(product)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteProduct = async () => {
+    if (!selectedProduct || !selectedStoreId) return
+
+    setIsDeleting(true)
+    try {
+      const supabase = createClient()
+      
+      // Delete the product from the specific shop
+      // Since products are store-specific (store_id), we can delete the entire product record
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", selectedProduct.id)
+        .eq("store_id", selectedStoreId)
+
+      if (error) throw error
+
+      // Remove from local state
+      setProducts(products.filter(p => p.id !== selectedProduct.id))
+      
+      setDeleteDialogOpen(false)
+      setSelectedProduct(null)
+      router.refresh()
+      alert("Product deleted successfully!")
+    } catch (error: any) {
+      alert(`Error deleting product: ${error.message}`)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   // Don't show products until store is selected (for admins)
   if (canAccessAllStores && !selectedStoreId) {
     return (
@@ -221,6 +259,7 @@ export function StockTable({
     <>
       <LoadingDialog isOpen={isLoading} message="Loading products..." />
       <LoadingDialog isOpen={isSavingPrice} message="Saving price..." />
+      <LoadingDialog isOpen={isDeleting} message="Deleting product..." />
       <div className="mb-4 space-y-4" suppressHydrationWarning>
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
           {(canAccessAllStores || stores.length > 0) && (
@@ -263,7 +302,7 @@ export function StockTable({
       </div>
 
       {selectedStoreId && (
-        <div className="rounded-md border" suppressHydrationWarning>
+        <div className="rounded-md border overflow-x-auto" suppressHydrationWarning>
           <Table>
             <TableHeader>
               <TableRow>
@@ -366,12 +405,23 @@ export function StockTable({
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button asChild variant="ghost" size="sm">
-                          <Link href={`/dashboard/stock/history/${product.id}`}>
-                            <History className="h-4 w-4 mr-2" />
-                            History
-                          </Link>
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button asChild variant="ghost" size="sm">
+                            <Link href={`/dashboard/stock/history/${product.id}`}>
+                              <History className="h-4 w-4 mr-2" />
+                              History
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteClick(product)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -396,6 +446,26 @@ export function StockTable({
           adjustmentType={adjustmentType}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Product</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{selectedProduct?.name}</strong> from this shop? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProduct} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Price Edit Dialog */}
       <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>

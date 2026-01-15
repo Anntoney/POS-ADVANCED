@@ -18,8 +18,8 @@ export default async function StockPage() {
   }
 
   try {
-    const storeContext = await getUserStoreContext(user.id)
-    
+  const storeContext = await getUserStoreContext(user.id)
+  
     // Fetch all stores for the filter
     const { data: stores } = await supabase
       .from("stores")
@@ -27,9 +27,12 @@ export default async function StockPage() {
       .eq("is_active", true)
       .order("name")
 
-    return (
-      <div suppressHydrationWarning>
+  return (
+    <div className="flex flex-col h-full" suppressHydrationWarning>
+      <div className="flex-shrink-0">
         <Header title="Stock Management" />
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-6 space-y-4" suppressHydrationWarning>
           <div className="flex justify-between items-center">
             <div>
@@ -62,7 +65,8 @@ export default async function StockPage() {
           />
         </div>
       </div>
-    )
+    </div>
+  )
   } catch (error) {
     console.error("Error loading stock page:", error)
     redirect("/dashboard")

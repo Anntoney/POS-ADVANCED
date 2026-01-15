@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 import type { Product } from "@/lib/types/database"
 
@@ -36,6 +36,7 @@ export function ProductForm({ product, categories, units }: ProductFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,9 +54,25 @@ export function ProductForm({ product, categories, units }: ProductFormProps) {
       return
     }
 
-    // Get user's store_id
-    const { data: profile } = await supabase.from("profiles").select("store_id").eq("id", user.id).single()
-    const storeId = profile?.store_id || null
+    // Get store_id from URL query parameter (if admin selected a store) or from user's profile
+    const storeIdFromUrl = searchParams.get("storeId")
+    let storeId: string | null = null
+    
+    if (storeIdFromUrl && storeIdFromUrl !== "both") {
+      // Use the store ID from URL if provided (admin selected a store)
+      storeId = storeIdFromUrl
+    } else {
+      // Fall back to user's profile store_id
+      const { data: profile } = await supabase.from("profiles").select("store_id").eq("id", user.id).single()
+      storeId = profile?.store_id || null
+    }
+
+    // Validate that store_id is set (required for product creation)
+    if (!product && !storeId) {
+      setError("Please select a store before creating a product. Go back to the products page and select a store.")
+      setIsLoading(false)
+      return
+    }
 
     const productData = {
       name,

@@ -34,19 +34,19 @@ export async function updateSession(request: NextRequest) {
   if ((request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/pos")) && (!user || authError)) {
     // Avoid redirect loop - only redirect if not already going to login
     if (request.nextUrl.pathname !== "/auth/login") {
-      const url = request.nextUrl.clone()
-      url.pathname = "/auth/login"
-      return NextResponse.redirect(url)
-    }
+    const url = request.nextUrl.clone()
+    url.pathname = "/auth/login"
+    return NextResponse.redirect(url)
+  }
   }
 
   // Redirect authenticated users away from auth pages (except error page)
   if (request.nextUrl.pathname.startsWith("/auth") && user && !authError && !request.nextUrl.pathname.includes("/auth/error")) {
     // Avoid redirect loop - only redirect if not already on dashboard
     if (!request.nextUrl.pathname.startsWith("/dashboard")) {
-      const url = request.nextUrl.clone()
-      url.pathname = "/dashboard"
-      return NextResponse.redirect(url)
+    const url = request.nextUrl.clone()
+    url.pathname = "/dashboard"
+    return NextResponse.redirect(url)
     }
   }
 

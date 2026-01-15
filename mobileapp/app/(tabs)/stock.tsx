@@ -94,13 +94,20 @@ export default function StockScreen() {
     }
   };
 
-  const loadStores = async () => {
+  const loadStores = async (canAccess: boolean | undefined, userStore: string | null) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('stores')
         .select('*')
         .eq('is_active', true)
         .order('name');
+
+      // For non-admins, only load their assigned store
+      if (canAccess === false && userStore) {
+        query = query.eq('id', userStore);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setStores(data || []);
@@ -153,10 +160,16 @@ export default function StockScreen() {
   useEffect(() => {
     const initialize = async () => {
       await loadUserContext();
-      await loadStores();
     };
     initialize();
   }, []);
+
+  // Load stores after user context is loaded
+  useEffect(() => {
+    if (userContextLoaded) {
+      loadStores(canAccessAllStores, userStoreId);
+    }
+  }, [userContextLoaded, canAccessAllStores, userStoreId]);
 
   useEffect(() => {
     // Wait for user context to be loaded first
@@ -632,7 +645,17 @@ export default function StockScreen() {
       <View style={styles.actionButtonsContainer}>
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: colors.primary }]}
-          onPress={() => setNewProductModalVisible(true)}
+          onPress={() => {
+            // Pre-select store when opening modal
+            if (canAccessAllStores === true && selectedStoreId) {
+              // Admin: pre-select the currently selected store
+              setNewProductStoreId(selectedStoreId);
+            } else if (canAccessAllStores === false && userStoreId) {
+              // Non-admin: pre-select their assigned store
+              setNewProductStoreId(userStoreId);
+            }
+            setNewProductModalVisible(true);
+          }}
         >
           <Text style={{ fontSize: 20, marginRight: 8 }}>➕</Text>
           <Text style={styles.actionButtonText}>New Product</Text>
@@ -862,33 +885,39 @@ export default function StockScreen() {
 
               <View style={styles.inputSection}>
                 <Text style={[styles.inputLabel, { color: colors.text }]}>Shop *</Text>
-                <View style={styles.storeSelectContainer}>
-                  {stores.map((store) => (
-                    <TouchableOpacity
-                      key={store.id}
-                      style={[
-                        styles.storeSelectButton,
-                        {
-                          backgroundColor: newProductStoreId === store.id ? colors.primary : colors.background,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                      onPress={() => setNewProductStoreId(store.id)}
-                    >
-                      <Text
+                {stores.length === 0 ? (
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary, fontStyle: 'italic' }]}>
+                    Loading stores...
+                  </Text>
+                ) : (
+                  <View style={styles.storeSelectContainer}>
+                    {stores.map((store) => (
+                      <TouchableOpacity
+                        key={store.id}
                         style={[
-                          styles.storeSelectText,
+                          styles.storeSelectButton,
                           {
-                            color: newProductStoreId === store.id ? '#fff' : colors.text,
-                            fontWeight: newProductStoreId === store.id ? '600' : '400',
+                            backgroundColor: newProductStoreId === store.id ? colors.primary : colors.background,
+                            borderColor: colors.border,
                           },
                         ]}
+                        onPress={() => setNewProductStoreId(store.id)}
                       >
-                        {store.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                        <Text
+                          style={[
+                            styles.storeSelectText,
+                            {
+                              color: newProductStoreId === store.id ? '#fff' : colors.text,
+                              fontWeight: newProductStoreId === store.id ? '600' : '400',
+                            },
+                          ]}
+                        >
+                          {store.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
 
               <View style={styles.rowInputs}>

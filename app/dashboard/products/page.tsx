@@ -1,8 +1,5 @@
 import { Header } from "@/components/dashboard/header"
-import { Button } from "@/components/ui/button"
-import { Plus, Download } from "lucide-react"
-import Link from "next/link"
-import { ProductsTable } from "@/components/products/products-table"
+import { Download } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { PermissionGuard } from "@/components/dashboard/permission-guard"
 import { getDefaultCurrencyServer } from "@/lib/utils/currency-server"
@@ -64,12 +61,6 @@ export default async function ProductsPage() {
             </div>
             <div className="flex gap-2">
               <DownloadProductsReport products={initialProducts} currency={currency} />
-              <Button asChild>
-                <Link href="/dashboard/products/new">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Product
-                </Link>
-              </Button>
             </div>
           </div>
 

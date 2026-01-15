@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
 import { LoadingDialog } from "@/components/ui/loading-dialog"
+import { AddProductButton } from "@/components/products/add-product-button"
 
 type ProductWithRelations = {
   id: string
@@ -27,12 +28,14 @@ export function ProductsTable({
   products, 
   canAccessAllStores,
   userStoreId,
-  selectedStoreId
+  selectedStoreId,
+  searchQuery
 }: { 
   products: ProductWithRelations[]
   canAccessAllStores: boolean
   userStoreId: string | null
   selectedStoreId?: string | null
+  searchQuery?: string
 }) {
   const router = useRouter()
   const [currency, setCurrency] = useState<Currency | null>(null)
@@ -67,9 +70,9 @@ export function ProductsTable({
         <LoadingDialog isOpen={isNavigatingToEdit} message="Loading product..." />
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <p className="text-muted-foreground">Please select a store above to view products</p>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard/products/new">Create your first product</Link>
-          </Button>
+          <div className="mt-4">
+            <AddProductButton selectedStoreId={selectedStoreId} />
+          </div>
         </div>
       </>
     )
@@ -87,10 +90,12 @@ export function ProductsTable({
       <>
         <LoadingDialog isOpen={isNavigatingToEdit} message="Loading product..." />
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <p className="text-muted-foreground">No products found</p>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard/products/new">Create your first product</Link>
-          </Button>
+          <p className="text-muted-foreground">
+            {searchQuery ? `No products found matching "${searchQuery}"` : "No products found"}
+          </p>
+          <div className="mt-4">
+            <AddProductButton selectedStoreId={selectedStoreId} />
+          </div>
         </div>
       </>
     )
