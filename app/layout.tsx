@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { VersionCheck } from '@/app/version-check'
 import Script from 'next/script'
+import '@/lib/utils/error-handler'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
