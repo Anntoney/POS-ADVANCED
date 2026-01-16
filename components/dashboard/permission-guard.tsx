@@ -28,7 +28,9 @@ export async function PermissionGuard({
   const hasAccess = await hasPermission(user.id, feature)
   
   if (!hasAccess) {
-    redirect("/dashboard")
+    // Redirect to login if user doesn't have permission
+    // This is safe because /auth/login is different from /dashboard, so no loop
+    redirect("/auth/login")
   }
 
   return <>{children}</>

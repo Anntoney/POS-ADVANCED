@@ -2,25 +2,31 @@ import { updateSession } from "@/lib/supabase/proxy"
 import { type NextRequest, NextResponse } from "next/server"
 
 export default async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  
+  // ABSOLUTELY NO REDIRECTS if already on /dashboard - just refresh session and return
+  if (pathname.startsWith("/dashboard")) {
+    const response = await updateSession(request)
+    return response
+  }
+  
   try {
-    // Use the existing updateSession function which handles most auth logic
+    // Use the existing updateSession function - it only refreshes sessions, no redirects
     const response = await updateSession(request)
 
-    // Check if updateSession already redirected
+    // Check if updateSession already redirected (it shouldn't, but just in case)
     const alreadyRedirecting = response.headers.get("location")
-    
-    // If already redirecting, don't do anything else to avoid loops
     if (alreadyRedirecting) {
       return response
     }
 
     // Only handle explicit error params if we're NOT on the login page
-    // This prevents redirect loops when already on /auth/login with error param
     const errorMessage = request.nextUrl.searchParams.get("error")
-    const isAuthRoute = request.nextUrl.pathname.startsWith("/auth/login")
+    const isOnLoginPage = pathname === "/auth/login"
     
-    if ((errorMessage === "refresh_token_not_found" || errorMessage === "session_expired") && !isAuthRoute) {
-      // Clear cookies and redirect to login
+    // Only redirect if we have an error AND we're NOT already on login page
+    if ((errorMessage === "refresh_token_not_found" || errorMessage === "session_expired") && !isOnLoginPage) {
+      // Clear cookies and redirect to login ONLY if not already there
       const allCookies = request.cookies.getAll()
       allCookies.forEach((cookie) => {
         const cookieName = cookie.name.toLowerCase()
@@ -41,22 +47,12 @@ export default async function proxy(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
+    // No redirects - just return the response
     return response
   } catch (error) {
     console.error("Proxy error:", error)
-
-    // On error, only redirect if on protected route and NOT already on login
-    const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard") ||
-                              request.nextUrl.pathname.startsWith("/pos")
-    const isAuthRoute = request.nextUrl.pathname.startsWith("/auth/login")
     
-    if (isProtectedRoute && !isAuthRoute) {
-      const url = request.nextUrl.clone()
-      url.pathname = "/auth/login"
-      url.searchParams.set("error", "middleware_error")
-      return NextResponse.redirect(url)
-    }
-
+    // On error, don't redirect - let pages handle it
     return NextResponse.next()
   }
 }
