@@ -16,8 +16,8 @@ import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/c
 
 type Product = {
   id: string
-  name: string
-  sku: string
+  name: string | null
+  sku: string | null
   cost_price: number
   selling_price: number
   wholesale_price?: number | null
@@ -167,7 +167,8 @@ export function POSInterface({
   const filteredProducts = canSearch
     ? products.filter(
         (p) =>
-          p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.sku.toLowerCase().includes(searchTerm.toLowerCase()),
+          (p.name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) || 
+          (p.sku?.toLowerCase() || "").includes(searchTerm.toLowerCase()),
       )
     : []
 
@@ -429,7 +430,7 @@ export function POSInterface({
         const { error: itemError } = await supabase.from("sale_items").insert({
           sale_id: sale.id,
           product_id: item.product.id,
-          product_name: item.product.name,
+          product_name: item.product.name || "Unknown Product",
           quantity: item.quantity,
           unit_price: itemPrice,
           tax_rate: item.product.tax_rate,
@@ -549,7 +550,7 @@ export function POSInterface({
               onClick={() => addToCart(product)}
             >
               <CardHeader className="p-5">
-                <CardTitle className="text-base font-semibold line-clamp-2">{product.name}</CardTitle>
+                <CardTitle className="text-base font-semibold line-clamp-2">{product.name || "Unknown Product"}</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
                 <div className="space-y-2">
@@ -591,7 +592,7 @@ export function POSInterface({
             <div className="space-y-4 py-4">
               <div>
                 <p className="text-sm font-medium mb-1">Product</p>
-                <p className="text-base">{selectedProduct.name}</p>
+                <p className="text-base">{selectedProduct.name || "Unknown Product"}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -669,7 +670,7 @@ export function POSInterface({
                 {cart.map((item) => (
                   <div key={item.product.id} className="flex items-center justify-between gap-3 border-b pb-3 bg-indigo-50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800 rounded-lg p-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-base font-semibold truncate text-indigo-900 dark:text-indigo-100">{item.product.name}</p>
+                      <p className="text-base font-semibold truncate text-indigo-900 dark:text-indigo-100">{item.product.name || "Unknown Product"}</p>
                       <div className="flex items-center gap-2">
                         <p className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
                           {currency
