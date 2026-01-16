@@ -24,6 +24,12 @@ export async function PermissionGuard({
     return <>{children}</>
   }
 
+  // Dashboard is accessible to all authenticated users (it's the main landing page)
+  // No need to check permissions for dashboard - just allow access
+  if (feature === "dashboard") {
+    return <>{children}</>
+  }
+
   // Check if user has permission for this feature
   const hasAccess = await hasPermission(user.id, feature)
   
