@@ -6,46 +6,51 @@ export default async function proxy(request: NextRequest) {
     // Use the existing updateSession function which handles most auth logic
     const response = await updateSession(request)
 
-    // Only handle additional error cases if updateSession didn't already redirect
-    const errorMessage = request.nextUrl.searchParams.get("error")
+    // Check if updateSession already redirected
     const alreadyRedirecting = response.headers.get("location")
     
-    // Handle explicit error params only if not already redirecting
-    if ((errorMessage === "refresh_token_not_found" || errorMessage === "session_expired") && !alreadyRedirecting) {
-      const isAuthRoute = request.nextUrl.pathname.startsWith("/auth/login")
-      
-      if (!isAuthRoute) {
-        // Clear cookies and redirect
-        const allCookies = request.cookies.getAll()
-        allCookies.forEach((cookie) => {
-          const cookieName = cookie.name.toLowerCase()
-          if (
-            cookieName.includes("supabase") ||
-            cookieName.includes("auth") ||
-            cookieName.startsWith("sb-") ||
-            cookieName.includes("access-token") ||
-            cookieName.includes("refresh-token")
-          ) {
-            response.cookies.delete(cookie.name)
-          }
-        })
+    // If already redirecting, don't do anything else to avoid loops
+    if (alreadyRedirecting) {
+      return response
+    }
 
-        const url = request.nextUrl.clone()
-        url.pathname = "/auth/login"
-        url.searchParams.set("error", "session_expired")
-        return NextResponse.redirect(url)
-      }
+    // Only handle explicit error params if we're NOT on the login page
+    // This prevents redirect loops when already on /auth/login with error param
+    const errorMessage = request.nextUrl.searchParams.get("error")
+    const isAuthRoute = request.nextUrl.pathname.startsWith("/auth/login")
+    
+    if ((errorMessage === "refresh_token_not_found" || errorMessage === "session_expired") && !isAuthRoute) {
+      // Clear cookies and redirect to login
+      const allCookies = request.cookies.getAll()
+      allCookies.forEach((cookie) => {
+        const cookieName = cookie.name.toLowerCase()
+        if (
+          cookieName.includes("supabase") ||
+          cookieName.includes("auth") ||
+          cookieName.startsWith("sb-") ||
+          cookieName.includes("access-token") ||
+          cookieName.includes("refresh-token")
+        ) {
+          response.cookies.delete(cookie.name)
+        }
+      })
+
+      const url = request.nextUrl.clone()
+      url.pathname = "/auth/login"
+      url.searchParams.set("error", "session_expired")
+      return NextResponse.redirect(url)
     }
 
     return response
   } catch (error) {
     console.error("Proxy error:", error)
 
-    // On error, only redirect if on protected route
+    // On error, only redirect if on protected route and NOT already on login
     const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard") ||
                               request.nextUrl.pathname.startsWith("/pos")
+    const isAuthRoute = request.nextUrl.pathname.startsWith("/auth/login")
     
-    if (isProtectedRoute) {
+    if (isProtectedRoute && !isAuthRoute) {
       const url = request.nextUrl.clone()
       url.pathname = "/auth/login"
       url.searchParams.set("error", "middleware_error")
