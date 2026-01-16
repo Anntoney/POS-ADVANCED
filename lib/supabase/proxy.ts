@@ -30,6 +30,48 @@ export async function updateSession(request: NextRequest) {
     error: authError,
   } = await supabase.auth.getUser()
 
+  // Handle specific auth errors
+  if (authError) {
+    // Check for refresh_token_not_found or similar session errors
+    const errorMessage = authError.message?.toLowerCase() || ""
+    if (
+      errorMessage.includes("refresh_token_not_found") ||
+      errorMessage.includes("invalid refresh token") ||
+      errorMessage.includes("jwt expired") ||
+      errorMessage.includes("session not found")
+    ) {
+      // Clear all Supabase cookies
+      const supabaseCookies = [
+        "sb-access-token",
+        "sb-refresh-token",
+        "supabase-auth-token",
+        "supabase.auth.token",
+      ]
+
+      supabaseCookies.forEach((cookieName) => {
+        supabaseResponse.cookies.delete(cookieName)
+        // Also try with different cookie name patterns
+        supabaseResponse.cookies.delete(`${cookieName}-code-verifier`)
+        supabaseResponse.cookies.delete(`${cookieName}-code-challenge`)
+      })
+
+      // Add error header for middleware to detect
+      supabaseResponse.headers.set("x-supabase-auth-error", authError.message)
+
+      // Redirect to login if on protected route
+      if (
+        (request.nextUrl.pathname.startsWith("/dashboard") ||
+          request.nextUrl.pathname.startsWith("/pos")) &&
+        request.nextUrl.pathname !== "/auth/login"
+      ) {
+        const url = request.nextUrl.clone()
+        url.pathname = "/auth/login"
+        url.searchParams.set("error", "session_expired")
+        return NextResponse.redirect(url)
+      }
+    }
+  }
+
   // Redirect to login if accessing protected routes without authentication
   if ((request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/pos")) && (!user || authError)) {
     // Avoid redirect loop - only redirect if not already going to login
