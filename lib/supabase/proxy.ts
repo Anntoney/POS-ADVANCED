@@ -75,128 +75,80 @@ export async function updateSession(request: NextRequest) {
   } catch (error: any) {
     // Catch any thrown errors (like refresh_token_not_found)
     authError = error
-    const errorMessage = error?.message?.toLowerCase() || ""
-    const errorCode = error?.code || ""
-
-    // Check if it's a refresh token error
-    if (
-      errorMessage.includes("refresh_token_not_found") ||
-      errorMessage.includes("invalid refresh token") ||
-      errorCode === "refresh_token_not_found"
-    ) {
-      // Clear all Supabase cookies more aggressively
-      const allCookies = request.cookies.getAll()
-      allCookies.forEach((cookie) => {
-        const cookieName = cookie.name.toLowerCase()
-        if (
-          cookieName.includes("supabase") ||
-          cookieName.includes("auth") ||
-          cookieName.startsWith("sb-") ||
-          cookieName.includes("access-token") ||
-          cookieName.includes("refresh-token") ||
-          cookieName.includes("code-verifier") ||
-          cookieName.includes("code-challenge")
-        ) {
-          supabaseResponse.cookies.delete(cookie.name)
-        }
-      })
-
-      // Add error header for middleware to detect
-      supabaseResponse.headers.set("x-supabase-auth-error", error.message || "Refresh token not found")
-
-      // Redirect to login if on protected route
-      if (
-        (request.nextUrl.pathname.startsWith("/dashboard") ||
-          request.nextUrl.pathname.startsWith("/pos")) &&
-        request.nextUrl.pathname !== "/auth/login"
-      ) {
-        const url = request.nextUrl.clone()
-        url.pathname = "/auth/login"
-        url.searchParams.set("error", "session_expired")
-        return NextResponse.redirect(url)
-      }
-    }
   }
 
-  // Handle specific auth errors from the result
-  if (authError) {
-    // Check for refresh_token_not_found or similar session errors
-    const errorMessage = authError.message?.toLowerCase() || ""
-    const errorCode = authError.code || ""
-    if (
-      errorMessage.includes("refresh_token_not_found") ||
-      errorMessage.includes("invalid refresh token") ||
-      errorMessage.includes("jwt expired") ||
-      errorMessage.includes("session not found") ||
-      errorCode === "refresh_token_not_found"
-    ) {
-      // Clear all Supabase cookies more aggressively
-      const allCookies = request.cookies.getAll()
-      allCookies.forEach((cookie) => {
-        const cookieName = cookie.name.toLowerCase()
-        if (
-          cookieName.includes("supabase") ||
-          cookieName.includes("auth") ||
-          cookieName.startsWith("sb-") ||
-          cookieName.includes("access-token") ||
-          cookieName.includes("refresh-token") ||
-          cookieName.includes("code-verifier") ||
-          cookieName.includes("code-challenge")
-        ) {
-          supabaseResponse.cookies.delete(cookie.name)
-        }
-      })
+  // Check if it's a refresh token error (from error or catch)
+  const errorMessage = authError?.message?.toLowerCase() || ""
+  const errorCode = authError?.code || ""
+  const isRefreshTokenError = authError && (
+    errorMessage.includes("refresh_token_not_found") ||
+    errorMessage.includes("invalid refresh token") ||
+    errorMessage.includes("jwt expired") ||
+    errorMessage.includes("session not found") ||
+    errorCode === "refresh_token_not_found"
+  )
 
-      // Add error header for middleware to detect
-      supabaseResponse.headers.set("x-supabase-auth-error", authError.message || "Refresh token not found")
-
-      // Redirect to login if on protected route
-      if (
-        (request.nextUrl.pathname.startsWith("/dashboard") ||
-          request.nextUrl.pathname.startsWith("/pos")) &&
-        request.nextUrl.pathname !== "/auth/login"
-      ) {
-        const url = request.nextUrl.clone()
-        url.pathname = "/auth/login"
-        url.searchParams.set("error", "session_expired")
-        return NextResponse.redirect(url)
-      }
-    }
-  }
-
-  // Redirect to login if accessing protected routes without authentication
-  // BUT: Don't redirect if already on login page or has error param (to avoid loops)
-  const hasErrorParam = request.nextUrl.searchParams.has("error")
-  const isOnLoginPage = request.nextUrl.pathname === "/auth/login"
-  
-  if (
-    (request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/pos")) &&
-    (!user || authError) &&
-    !isOnLoginPage &&
-    !hasErrorParam
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/auth/login"
-    url.searchParams.set("error", "session_expired")
-    return NextResponse.redirect(url)
-  }
-
-  // Redirect authenticated users away from auth pages (except error page)
-  // BUT: Don't redirect if there's an error param (session expired, etc.)
-  // Note: hasErrorParam is already defined above
-  if (
-    request.nextUrl.pathname.startsWith("/auth") &&
-    user &&
-    !authError &&
-    !request.nextUrl.pathname.includes("/auth/error") &&
-    !hasErrorParam
-  ) {
-    // Avoid redirect loop - only redirect if not already on dashboard
-    if (!request.nextUrl.pathname.startsWith("/dashboard")) {
+  // If user is authenticated, just let them through - don't check errors
+  // The dashboard layout will handle auth checks
+  if (user && !isRefreshTokenError) {
+    // User is authenticated, allow request
+    // Only redirect authenticated users away from auth pages
+    const isAuthRoute = request.nextUrl.pathname.startsWith("/auth")
+    const hasErrorParam = request.nextUrl.searchParams.has("error")
+    
+    if (isAuthRoute && !request.nextUrl.pathname.includes("/auth/error") && !hasErrorParam) {
+      // Redirect authenticated users away from auth pages
       const url = request.nextUrl.clone()
       url.pathname = "/dashboard"
       return NextResponse.redirect(url)
     }
+    
+    return supabaseResponse
+  }
+
+  // Handle refresh token errors - clear cookies and redirect
+  if (isRefreshTokenError) {
+    // Clear all Supabase cookies
+    const allCookies = request.cookies.getAll()
+    allCookies.forEach((cookie) => {
+      const cookieName = cookie.name.toLowerCase()
+      if (
+        cookieName.includes("supabase") ||
+        cookieName.includes("auth") ||
+        cookieName.startsWith("sb-") ||
+        cookieName.includes("access-token") ||
+        cookieName.includes("refresh-token") ||
+        cookieName.includes("code-verifier") ||
+        cookieName.includes("code-challenge")
+      ) {
+        supabaseResponse.cookies.delete(cookie.name)
+      }
+    })
+
+    // Redirect to login if on protected route
+    const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard") ||
+                              request.nextUrl.pathname.startsWith("/pos")
+    
+    if (isProtectedRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/auth/login"
+      url.searchParams.set("error", "session_expired")
+      return NextResponse.redirect(url)
+    }
+
+    return supabaseResponse
+  }
+
+  // Redirect to login if accessing protected routes without authentication
+  const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard") ||
+                            request.nextUrl.pathname.startsWith("/pos")
+  const isLoginPage = request.nextUrl.pathname === "/auth/login"
+  const hasErrorParam = request.nextUrl.searchParams.has("error")
+  
+  if (isProtectedRoute && !user && !isLoginPage && !hasErrorParam) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/auth/login"
+    return NextResponse.redirect(url)
   }
 
   return supabaseResponse
