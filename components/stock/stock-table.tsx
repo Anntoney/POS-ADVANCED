@@ -339,7 +339,7 @@ export function StockTable({
             </Select>
             <p className="text-sm text-muted-foreground">Please select a shop before viewing stock data</p>
           </div>
-        </div>
+      </div>
       </>
     )
   }
@@ -372,15 +372,15 @@ export function StockTable({
           <div className="space-y-2 flex-1 max-w-sm">
             <Label htmlFor="search">Search Products</Label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
                 id="search"
                 placeholder="Search products by name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
                 disabled={!selectedStoreId}
-              />
+          />
             </div>
           </div>
         </div>
@@ -398,31 +398,31 @@ export function StockTable({
             className="rounded-md border overflow-x-auto" 
             suppressHydrationWarning
           >
-            <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product Name</TableHead>
-                <TableHead>Current Stock</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Product Name</TableHead>
+              <TableHead>Current Stock</TableHead>
                 <TableHead>Buying Price</TableHead>
                 <TableHead>Selling Price</TableHead>
                 <TableHead>Wholesale Price</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProducts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredProducts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     {searchQuery ? `No products found matching "${searchQuery}"` : "No products found"}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredProducts.map((product) => {
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredProducts.map((product) => {
                   const status = getStockStatus(product.stock_quantity)
 
-                  return (
-                    <TableRow key={product.id}>
+                return (
+                  <TableRow key={product.id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <span>{product.name}</span>
@@ -437,35 +437,35 @@ export function StockTable({
                           </Button>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span>
-                            {product.stock_quantity} {product.units?.short_name || ""}
-                          </span>
-                          <div className="flex items-center gap-1 ml-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={() => handleQuickAdjust(product, "add")}
-                              title="Add stock"
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={() => handleQuickAdjust(product, "subtract")}
-                              disabled={product.stock_quantity === 0}
-                              title="Subtract stock"
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                          </div>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span>
+                          {product.stock_quantity} {product.units?.short_name || ""}
+                        </span>
+                        <div className="flex items-center gap-1 ml-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => handleQuickAdjust(product, "add")}
+                            title="Add stock"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => handleQuickAdjust(product, "subtract")}
+                            disabled={product.stock_quantity === 0}
+                            title="Subtract stock"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
                         </div>
-                      </TableCell>
-                      <TableCell>
+                      </div>
+                    </TableCell>
+                    <TableCell>
                         <div className="flex items-center gap-2">
                           <span>{formatCurrency(product.cost_price, currency)}</span>
                           <Button
@@ -506,18 +506,18 @@ export function StockTable({
                             <Edit className="h-3 w-3" />
                           </Button>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={status.variant}>{status.label}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button asChild variant="ghost" size="sm">
-                            <Link href={`/dashboard/stock/history/${product.id}`}>
-                              <History className="h-4 w-4 mr-2" />
-                              History
-                            </Link>
-                          </Button>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/dashboard/stock/history/${product.id}`}>
+                          <History className="h-4 w-4 mr-2" />
+                          History
+                        </Link>
+                      </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -528,14 +528,14 @@ export function StockTable({
                             Delete
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-          </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
           {/* Sticky horizontal scrollbar - always visible at bottom */}
           <div 
             ref={scrollbarRef}

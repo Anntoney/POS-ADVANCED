@@ -30,34 +30,34 @@ export default async function StockPage() {
   return (
     <div className="flex flex-col h-full" suppressHydrationWarning>
       <div className="flex-shrink-0">
-        <Header title="Stock Management" />
+      <Header title="Stock Management" />
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-6 space-y-4" suppressHydrationWarning>
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-semibold">Inventory Overview</h2>
-              <p className="text-sm text-muted-foreground">Monitor and adjust stock levels</p>
-            </div>
-            <div className="flex gap-2">
-              <Button asChild variant="outline">
-                <Link href="/dashboard/stock/transfers">
-                  Transfer Logs
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/stock/transfer">
-                  Transfer Stock
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link href="/dashboard/stock/adjust">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Stock Adjustment
-                </Link>
-              </Button>
-            </div>
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold">Inventory Overview</h2>
+            <p className="text-sm text-muted-foreground">Monitor and adjust stock levels</p>
           </div>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link href="/dashboard/stock/transfers">
+                Transfer Logs
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/stock/transfer">
+                Transfer Stock
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/dashboard/stock/adjust">
+                <Plus className="mr-2 h-4 w-4" />
+                Stock Adjustment
+              </Link>
+            </Button>
+          </div>
+        </div>
           <StockTable 
             stores={stores || []}
             canAccessAllStores={storeContext.canAccessAllStores}
