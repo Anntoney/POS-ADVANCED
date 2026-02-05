@@ -123,64 +123,40 @@ export function UserManagement() {
     try {
       const supabase = createClient()
 
-      // Create user via auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-          data: {
-            full_name: fullName,
-            role: role,
-          },
+      // Call server action to create user without email verification
+      const response = await fetch("/api/admin/create-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          role,
+          storeId: storeId === "none" ? null : storeId,
+          isActive,
+        }),
       })
 
-      if (authError) throw authError
+      const result = await response.json()
 
-      // Wait a bit for the profile trigger to create the profile
-      if (authData.user) {
-        // Wait for profile to be created by trigger
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to create user")
+      }
 
-        // Update profile with role, store, and active status
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .update({
-            role: role,
-            is_active: isActive,
-            full_name: fullName,
-            store_id: storeId === "none" ? null : storeId,
-          })
-          .eq("id", authData.user.id)
+      // Create default permissions (all enabled)
+      const defaultPermissions = FEATURES.map((feature) => ({
+        user_id: result.userId,
+        feature: feature.id,
+        can_access: true,
+      }))
 
-        if (profileError) {
-          console.error("Profile update error:", profileError)
-          // Try to create profile manually if update fails
-          const { error: insertError } = await supabase.from("profiles").insert({
-            id: authData.user.id,
-            email: email,
-            full_name: fullName,
-            role: role,
-            is_active: isActive,
-            store_id: storeId === "none" ? null : storeId,
-          })
-          if (insertError) throw insertError
-        }
+      const { error: permError } = await supabase.from("user_permissions").insert(defaultPermissions)
 
-        // Create default permissions (all enabled)
-        const defaultPermissions = FEATURES.map((feature) => ({
-          user_id: authData.user.id,
-          feature: feature.id,
-          can_access: true,
-        }))
-
-        const { error: permError } = await supabase.from("user_permissions").insert(defaultPermissions)
-
-        if (permError) {
-          console.error("Permissions error:", permError)
-          // Don't throw, permissions can be set later
-        }
+      if (permError) {
+        console.error("Permissions error:", permError)
+        // Don't throw, permissions can be set later
       }
 
       // Reset form
@@ -341,7 +317,7 @@ export function UserManagement() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
-              <DialogDescription>Add a new user to the system. They will receive an email to confirm their account.</DialogDescription>
+              <DialogDescription>Add a new user to the system. They can login immediately with the provided credentials.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">

@@ -1,32 +1,19 @@
 {
   "cli": {
-    "version": ">= 5.0.0"
+    "version": ">= 13.2.0"
   },
   "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "android": {
-        "gradleCommand": ":app:assembleDebug"
-      },
-      "ios": {
-        "buildConfiguration": "Debug"
-      }
-    },
     "preview": {
-      "distribution": "internal",
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "node": "20.18.0"
       }
     },
     "production": {
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "node": "20.18.0"
       }
     }
-  },
-  "submit": {
-    "production": {}
   }
 }

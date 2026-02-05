@@ -1,145 +1,227 @@
-# POS Admin Mobile App
+# Admin Mobile App
 
-A React Native mobile application built with Expo for administrators to manage the POS system on the go.
+A React Native mobile application for administrators to manage inventory, sales, debts, and returns on the go.
 
 ## Features
 
-- **Dashboard**: Real-time overview of key business metrics
-- **Products Management**: View and manage products with search functionality
-- **Stock Management**: Monitor stock levels with low stock alerts
-- **Sales Tracking**: View recent sales and revenue statistics
-- **Settings**: User profile and system settings
-- **Authentication**: Secure login with admin-only access
+### 1. Stock Management
+- View all products with current stock levels
+- Search products by name, SKU, or barcode
+- Add stock to products
+- Deduct stock from products
+- Update product prices
+- Low stock indicators
+- Stock adjustment tracking with reasons
+
+### 2. Sales Tracking
+- View sales by date range
+- Filter sales between start and end dates
+- See total sales amount and transaction count
+- View payment status (Paid, Partial, Pending)
+- Customer information for each sale
+- Payment method details
+- Outstanding balance tracking
+
+### 3. Customer Debts
+- View all customers with outstanding balances
+- Total debt summary
+- Customer contact information
+- Individual debt amounts
+- Quick access to customer details
+
+### 4. Returns Management
+- View all product returns
+- Return reference to original sale
+- Customer information
+- Refund method tracking
+- Return notes and reasons
+- Total returns summary
+- Detailed breakdown (subtotal, tax, total)
+
+### 5. Profile & Settings
+- User profile information
+- App version and status
+- Quick actions (sync, settings, help)
+- Secure logout
+
+## Tech Stack
+
+- **Framework**: React Native with Expo
+- **Navigation**: Expo Router (file-based routing)
+- **Backend**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth with secure storage
+- **UI**: React Native components with custom styling
+- **Icons**: Ionicons from @expo/vector-icons
+- **Date Handling**: date-fns
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
-- npm or yarn
+- Node.js 18+ installed
+- npm or yarn package manager
 - Expo CLI (`npm install -g expo-cli`)
-- Expo Go app on your mobile device (for development)
+- iOS Simulator (Mac) or Android Emulator
+- Expo Go app on physical device (optional)
 
-## Setup
+## Installation
 
-1. **Install dependencies:**
-   ```bash
-   cd mobileapp
-   npm install
-   ```
-
-2. **Configure environment variables:**
-   - Copy `.env.example` to `.env`
-   - Add your Supabase URL and anon key:
-     ```
-     EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
-     EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-     ```
-
-3. **Start the development server:**
-   ```bash
-   npm start
-   ```
-
-4. **Run on your device:**
-   - Scan the QR code with Expo Go (iOS) or Camera app (Android)
-   - Or press `i` for iOS simulator, `a` for Android emulator
-
-## Building for Production
-
-### iOS
+1. Navigate to the mobile app directory:
 ```bash
-expo build:ios
+cd mobileapp
 ```
 
-### Android
+2. Install dependencies:
 ```bash
-expo build:android
+npm install
 ```
 
-Or use EAS Build (recommended):
+3. Configure environment variables:
+The `.env` file is already configured with your Supabase credentials.
+
+## Running the App
+
+### Start the development server:
 ```bash
-npm install -g eas-cli
-eas build --platform ios
-eas build --platform android
+npm start
 ```
+
+### Run on specific platforms:
+
+**iOS Simulator (Mac only):**
+```bash
+npm run ios
+```
+
+**Android Emulator:**
+```bash
+npm run android
+```
+
+**Web Browser:**
+```bash
+npm run web
+```
+
+**Physical Device:**
+1. Install Expo Go from App Store or Play Store
+2. Scan the QR code shown in terminal
+3. App will load on your device
 
 ## Project Structure
 
 ```
 mobileapp/
 ├── app/
-│   ├── (tabs)/          # Tab navigation screens
-│   │   ├── dashboard.tsx
-│   │   ├── products.tsx
-│   │   ├── stock.tsx
-│   │   ├── sales.tsx
-│   │   └── settings.tsx
-│   ├── auth/
-│   │   └── login.tsx    # Login screen
-│   └── _layout.tsx       # Root layout
+│   ├── (auth)/
+│   │   ├── _layout.tsx       # Auth layout
+│   │   └── login.tsx          # Login screen
+│   ├── (tabs)/
+│   │   ├── _layout.tsx        # Tab navigation layout
+│   │   ├── index.tsx          # Stock management
+│   │   ├── sales.tsx          # Sales tracking
+│   │   ├── debts.tsx          # Customer debts
+│   │   ├── returns.tsx        # Returns management
+│   │   └── profile.tsx        # User profile
+│   ├── _layout.tsx            # Root layout
+│   └── index.tsx              # Entry point
 ├── lib/
-│   ├── supabase.ts      # Supabase client
-│   ├── types.ts         # TypeScript types
-│   └── utils.ts         # Utility functions
-├── package.json
-├── app.json             # Expo configuration
-└── tsconfig.json        # TypeScript configuration
+│   ├── supabase.ts            # Supabase client config
+│   └── types.ts               # TypeScript types
+├── .env                       # Environment variables
+├── app.json                   # Expo configuration
+├── package.json               # Dependencies
+└── tsconfig.json              # TypeScript config
 ```
 
-## Key Technologies
+## Authentication
 
-- **Expo**: React Native framework
-- **Expo Router**: File-based routing
-- **Supabase**: Backend and authentication
-- **TypeScript**: Type safety
-- **React Navigation**: Navigation library
+- Only users with **admin** role can access the app
+- Login credentials are validated against Supabase Auth
+- Sessions are stored securely using Expo SecureStore
+- Auto-logout on session expiry
 
-## Admin Access
+## Database Tables Used
 
-This app is restricted to users with the `admin` role. Non-admin users will be automatically logged out upon login attempt.
+- `products` - Product inventory
+- `stock_adjustments` - Stock change history
+- `sales` - Sales transactions
+- `customers` - Customer information
+- `returns` - Product returns
+- `profiles` - User profiles
 
-## Features in Detail
+## Security
 
-### Dashboard
-- Total revenue overview
-- Product count
-- Customer count
-- Sales count
-- Low stock alerts
+- Environment variables for sensitive data
+- Secure session storage
+- Row-level security on Supabase
+- Admin-only access control
+- Automatic session refresh
 
-### Products
-- Search functionality
-- Product details (price, stock, SKU)
-- Active/inactive status
-- Low stock indicators
+## Customization
 
-### Stock
-- Filter by stock status (All, Low Stock, Out of Stock)
-- Visual stock level indicators
-- Stock quantity tracking
+### Change App Name
+Edit `app.json`:
+```json
+{
+  "expo": {
+    "name": "Your App Name",
+    "slug": "your-app-slug"
+  }
+}
+```
 
-### Sales
-- Recent sales list
-- Payment status indicators
-- Payment method display
-- Revenue summary
+### Change Colors
+Update styles in each screen file. Main colors used:
+- Primary: `#007AFF` (iOS blue)
+- Success: `#4CAF50` (green)
+- Warning: `#FF9800` (orange)
+- Error: `#FF5252` (red)
 
-### Settings
-- User profile display
-- User management (coming soon)
-- Store management (coming soon)
-- Reports (coming soon)
+### Add App Icons
+Replace placeholder images in `assets/` folder:
+- `icon.png` - App icon (1024x1024)
+- `splash.png` - Splash screen
+- `adaptive-icon.png` - Android adaptive icon
+
+## Building for Production
+
+### iOS (requires Mac):
+```bash
+expo build:ios
+```
+
+### Android:
+```bash
+expo build:android
+```
+
+### Using EAS Build (recommended):
+```bash
+npm install -g eas-cli
+eas build --platform ios
+eas build --platform android
+```
 
 ## Troubleshooting
 
-### Authentication Issues
-- Ensure your Supabase credentials are correct
-- Check that RLS policies allow admin access
-- Verify the user has admin role in the profiles table
-
-### Build Issues
+**App won't start:**
 - Clear cache: `expo start -c`
 - Reinstall dependencies: `rm -rf node_modules && npm install`
 
+**Authentication issues:**
+- Verify Supabase credentials in `.env`
+- Check user role is set to "admin"
+
+**Date picker not showing:**
+- Ensure `@react-native-community/datetimepicker` is installed
+- Rebuild the app after installing
+
+## Support
+
+For issues or questions:
+1. Check the main system documentation
+2. Review Expo documentation: https://docs.expo.dev
+3. Check Supabase docs: https://supabase.com/docs
+
 ## License
 
-Private - Internal use only
+This mobile app is part of the main inventory management system.

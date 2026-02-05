@@ -31,12 +31,12 @@ dotenv.config({ path: path.join(process.cwd(), '.env') });
 
 // Configuration interface
 interface MySQLConfig {
-  host: string;
-  port: number;
-  user: string;
-  password: string;
-  database: string;
-  table?: string; // Optional: specify table name if different from default
+  host: "localhost";
+  port: 3306;
+  user: "root";
+  password: "";
+  database: "pos";
+  table?: "stock"; // Optional: specify table name if different from default
 }
 
 interface FieldMapping {

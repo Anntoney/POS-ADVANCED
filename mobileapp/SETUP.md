@@ -1,62 +1,70 @@
-# Quick Setup Guide
+# Quick Setup for Windows
 
-## 1. Install Dependencies
+## Step 1: Install Dependencies
 
-```bash
-cd mobileapp
-npm install
+Open Command Prompt in the `mobileapp` folder and run:
+
+```cmd
+npm install --legacy-peer-deps
 ```
 
-## 2. Configure Environment Variables
+**This will take 2-5 minutes. Be patient!**
 
-Create a `.env` file in the `mobileapp` directory:
+## Step 2: Start the App
 
-```env
-EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+After installation completes:
+
+```cmd
+npx expo start --clear
 ```
 
-You can find these values in your Supabase project settings.
+## Step 3: Update Expo Go App
 
-## 3. Start Development Server
+You have two options:
 
-```bash
-npm start
+### Option A: Update Expo Go (Recommended)
+1. Open Play Store or App Store on your phone
+2. Search for "Expo Go"
+3. Update to the latest version (SDK 54)
+4. Scan the QR code again
+
+### Option B: Downgrade Project to SDK 51
+If you can't update Expo Go, run:
+```cmd
+npm install expo@~51.0.0 --legacy-peer-deps
+npx expo start --clear
 ```
-
-## 4. Run on Device
-
-### Option A: Using Expo Go (Recommended for Development)
-1. Install Expo Go on your phone:
-   - iOS: [App Store](https://apps.apple.com/app/expo-go/id982107779)
-   - Android: [Play Store](https://play.google.com/store/apps/details?id=host.exp.exponent)
-2. Scan the QR code shown in the terminal
-3. The app will load on your device
-
-### Option B: Using Simulator/Emulator
-- iOS Simulator: Press `i` in the terminal
-- Android Emulator: Press `a` in the terminal
-
-## 5. Login
-
-Use an admin account from your Supabase database. The app will only allow users with the `admin` role to access.
 
 ## Troubleshooting
 
-### "Missing Supabase environment variables"
-- Make sure you created a `.env` file with the correct variable names
-- Restart the Expo server after creating/updating `.env`
+### "npm install" is stuck
+- Press Ctrl+C to cancel
+- Delete `node_modules` folder
+- Run: `npm install --legacy-peer-deps` again
 
-### "Access Denied" on login
-- Ensure the user has `role: 'admin'` in the `profiles` table
-- Check that the user exists in Supabase Auth
+### "Asset not found" error
+- This is normal for development
+- The app will use default Expo icons
+- You can add custom icons later
 
-### Build errors
-- Clear cache: `expo start -c`
-- Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
+### Still connecting to wrong Supabase project
+- Make sure you ran `npx expo start --clear` (with --clear flag)
+- Reload the app on your device (shake phone → Reload)
+- Check terminal for "🔧 Supabase Configuration" message
+
+## What You Should See
+
+After starting, the terminal should show:
+```
+🔧 Supabase Configuration:
+URL: https://soqxolezaulotushohjd.supabase.co
+Project Ref: soqxolezaulotushohjd
+```
+
+If the Project Ref is correct, you're good to go!
 
 ## Next Steps
 
-- Customize the app icon and splash screen in `app.json`
-- Add more features as needed
-- Build for production when ready
+1. Scan QR code with Expo Go
+2. Login with your admin credentials
+3. Start managing your inventory!

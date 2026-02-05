@@ -1,15 +1,8 @@
 export type UserRole = "admin" | "manager" | "cashier"
 
-export interface Profile {
-  id: string
-  email: string
-  full_name: string | null
-  role: UserRole
-  is_active: boolean
-  store_id: string | null
-  created_at: string
-  updated_at: string
-}
+export type PaymentMethod = "cash" | "mobile_money" | "bank_transfer" | "credit"
+
+export type PaymentStatus = "pending" | "partial" | "paid"
 
 export interface Product {
   id: string
@@ -17,6 +10,7 @@ export interface Product {
   sku: string | null
   barcode: string | null
   category_id: string | null
+  unit_id: string | null
   description: string | null
   cost_price: number
   selling_price: number
@@ -31,14 +25,26 @@ export interface Product {
   updated_at: string
 }
 
-export interface Category {
+export interface Sale {
   id: string
-  name: string
-  description: string | null
+  sale_number: string
+  customer_id: string | null
+  sale_date: string
+  subtotal: number
+  tax_amount: number
+  discount_amount: number
+  total_amount: number
+  payment_method: PaymentMethod
+  payment_status: PaymentStatus
+  amount_paid: number
+  notes: string | null
   store_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
+  customer?: {
+    name: string
+  }
 }
 
 export interface Customer {
@@ -47,49 +53,40 @@ export interface Customer {
   email: string | null
   phone: string | null
   address: string | null
-  city: string | null
-  country: string | null
   balance: number
   store_id: string | null
-  created_by: string | null
   created_at: string
-  updated_at: string
 }
 
-export interface Sale {
+export interface Return {
   id: string
+  return_number: string
+  sale_id: string | null
   customer_id: string | null
-  total_amount: number
-  discount_amount: number
+  return_date: string
+  subtotal: number
   tax_amount: number
-  payment_method: string
-  payment_status: string
+  total_amount: number
+  refund_method: PaymentMethod
+  notes: string | null
   store_id: string | null
   created_by: string | null
   created_at: string
-  updated_at: string
+  customer?: {
+    name: string
+  }
+  sale?: {
+    sale_number: string
+  }
 }
 
-export interface Store {
+export interface StockAdjustment {
   id: string
-  name: string
-  address: string | null
-  phone: string | null
-  email: string | null
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface CustomerPayment {
-  id: string
-  payment_number: string
-  customer_id: string
-  sale_id: string | null
-  amount: number
-  payment_method: string
-  payment_date: string
-  notes: string | null
-  created_by: string
+  product_id: string
+  adjustment_type: 'addition' | 'subtraction' | 'damage' | 'loss' | 'correction'
+  quantity: number
+  reason: string | null
+  store_id: string | null
+  created_by: string | null
   created_at: string
 }

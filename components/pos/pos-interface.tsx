@@ -13,6 +13,7 @@ import { LoadingDialog } from "@/components/ui/loading-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
+import { PrintReceiptDialog } from "@/components/receipts/print-receipt-dialog"
 
 type Product = {
   id: string
@@ -88,6 +89,10 @@ export function POSInterface({
 
   const [payments, setPayments] = useState<PaymentEntry[]>([{ method: "cash", amount: "" }])
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState("cash")
+  
+  // Receipt printing state
+  const [showReceiptDialog, setShowReceiptDialog] = useState(false)
+  const [completedSaleId, setCompletedSaleId] = useState<string | null>(null)
 
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
@@ -492,6 +497,10 @@ export function POSInterface({
       } else {
         alert(`Sale completed successfully! Sale #${saleNumber}`)
       }
+
+      // Show receipt printing dialog
+      setCompletedSaleId(sale.id)
+      setShowReceiptDialog(true)
 
       setCart([])
       setSelectedCustomer("")
@@ -924,6 +933,19 @@ export function POSInterface({
         </Card>
       </div>
     </div>
+
+    {/* Receipt Printing Dialog */}
+    <PrintReceiptDialog
+      isOpen={showReceiptDialog}
+      onClose={() => setShowReceiptDialog(false)}
+      title="Print Sales Receipt"
+      description="Sale completed successfully! Would you like to print a receipt?"
+      type="sale"
+      saleId={completedSaleId || undefined}
+      onPrintComplete={() => {
+        setCompletedSaleId(null)
+      }}
+    />
     </>
   )
 }

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import { getDefaultCurrencyServer } from "@/lib/utils/currency-server"
 import { formatCurrency } from "@/lib/utils/currency"
+import { PrintReceiptButton } from "@/components/receipts/print-receipt-button"
 
 export default async function SaleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -36,7 +37,14 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div>
-      <Header title="Sale Details" />
+      <div className="flex items-center justify-between mb-6">
+        <Header title="Sale Details" />
+        <PrintReceiptButton
+          type="sale"
+          saleId={id}
+          variant="default"
+        />
+      </div>
       <div className="p-6 space-y-6">
         <div className="grid gap-6 md:grid-cols-2">
           <Card>

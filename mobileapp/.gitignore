@@ -3,30 +3,31 @@
 dist/
 web-build/
 
-# Node
-node_modules/
-npm-debug.log
-yarn-error.log
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
 
-# Environment variables
-.env
-.env.local
-.env.production
+# Metro
+.metro-health-check*
 
-# OS
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
 .DS_Store
 *.pem
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# local env files
+.env*.local
 
-# TypeScript
+# typescript
 *.tsbuildinfo
 
-# Build
-*.apk
-*.aab
-*.ipa
+# Node
+node_modules/

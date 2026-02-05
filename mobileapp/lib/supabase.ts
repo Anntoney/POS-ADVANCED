@@ -1,63 +1,38 @@
-import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
+import 'react-native-url-polyfill/auto'
+import { createClient } from '@supabase/supabase-js'
+import * as SecureStore from 'expo-secure-store'
 
-// These should be set as environment variables
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
 
-if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-  console.warn('⚠️ Missing Supabase environment variables. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file');
+// Debug: Log to verify correct project is being used
+console.log('🔧 Supabase Configuration:')
+console.log('URL:', supabaseUrl)
+console.log('Project Ref:', supabaseUrl?.split('//')[1]?.split('.')[0])
+console.log('Key (first 20 chars):', supabaseAnonKey?.substring(0, 20) + '...')
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('❌ Missing Supabase credentials!')
+  console.error('Make sure .env file exists with EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY')
 }
 
-// Custom storage adapter for React Native using SecureStore
-// This implements the Storage interface expected by Supabase
 const ExpoSecureStoreAdapter = {
-  getItem: async (key: string): Promise<string | null> => {
-    try {
-      const value = await SecureStore.getItemAsync(key);
-      return value;
-    } catch (error) {
-      console.error('Error getting item from SecureStore:', error);
-      return null;
-    }
+  getItem: (key: string) => {
+    return SecureStore.getItemAsync(key)
   },
-  setItem: async (key: string, value: string): Promise<void> => {
-    try {
-      await SecureStore.setItemAsync(key, value);
-    } catch (error) {
-      console.error('Error setting item in SecureStore:', error);
-      // Don't throw - allow Supabase to continue
-    }
+  setItem: (key: string, value: string) => {
+    SecureStore.setItemAsync(key, value)
   },
-  removeItem: async (key: string): Promise<void> => {
-    try {
-      await SecureStore.deleteItemAsync(key);
-    } catch (error) {
-      console.error('Error removing item from SecureStore:', error);
-      // Don't throw - allow Supabase to continue
-    }
+  removeItem: (key: string) => {
+    SecureStore.deleteItemAsync(key)
   },
-};
+}
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: ExpoSecureStoreAdapter as any,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
   },
-  global: {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  },
-  db: {
-    schema: 'public',
-  },
-  // Add timeout configuration
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+})

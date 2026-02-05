@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
 import type { Customer } from "@/lib/types/database"
+import { PrintReceiptDialog } from "@/components/receipts/print-receipt-dialog"
 
 type CustomerWithStore = Customer & {
   stores?: { id: string; name: string } | null
@@ -52,6 +53,10 @@ export function CreditManagement({
   const [isViewingDetails, setIsViewingDetails] = useState(false)
   const [currency, setCurrency] = useState<Currency | null>(null)
   const router = useRouter()
+  
+  // Receipt printing state
+  const [showReceiptDialog, setShowReceiptDialog] = useState(false)
+  const [completedPaymentId, setCompletedPaymentId] = useState<string | null>(null)
 
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
@@ -155,7 +160,21 @@ export function CreditManagement({
 
       if (balanceError) throw balanceError
 
+      // Get the payment ID for receipt printing
+      const { data: paymentRecord } = await supabase
+        .from("customer_payments")
+        .select("id")
+        .eq("payment_number", paymentNumber)
+        .single()
+
       alert(`Payment recorded successfully! Payment #${paymentNumber}`)
+      
+      // Show receipt printing dialog
+      if (paymentRecord) {
+        setCompletedPaymentId(paymentRecord.id)
+        setShowReceiptDialog(true)
+      }
+      
       setIsOpen(false)
       setPaymentAmount("")
       setNotes("")
@@ -359,6 +378,19 @@ export function CreditManagement({
       </Card>
     </div>
     <LoadingDialog isOpen={isViewingDetails} message="Loading credit details..." />
+    
+    {/* Receipt Printing Dialog */}
+    <PrintReceiptDialog
+      isOpen={showReceiptDialog}
+      onClose={() => setShowReceiptDialog(false)}
+      title="Print Payment Receipt"
+      description="Payment recorded successfully! Would you like to print a receipt?"
+      type="payment"
+      paymentId={completedPaymentId || undefined}
+      onPrintComplete={() => {
+        setCompletedPaymentId(null)
+      }}
+    />
     </>
   )
 }

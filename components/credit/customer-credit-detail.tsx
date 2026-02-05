@@ -10,6 +10,7 @@ import { FileText, Download, ArrowLeft, ShoppingCart, CreditCard } from "lucide-
 import { useRouter } from "next/navigation"
 import { getDefaultCurrency, formatCurrency, type Currency } from "@/lib/utils/currency"
 import type { Customer } from "@/lib/types/database"
+import { PrintReceiptButton } from "@/components/receipts/print-receipt-button"
 
 interface SaleItem {
   id: string
@@ -496,6 +497,7 @@ export function CustomerCreditDetail({
                       <TableHead>Method</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Notes</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -512,6 +514,16 @@ export function CustomerCreditDetail({
                             : `$${Number(payment.amount).toFixed(2)}`}
                         </TableCell>
                         <TableCell className="text-muted-foreground">{payment.notes || "-"}</TableCell>
+                        <TableCell className="text-center">
+                          <PrintReceiptButton
+                            type="payment"
+                            paymentId={payment.id}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            Print
+                          </PrintReceiptButton>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -6,6 +6,7 @@ import { CompanySettings } from "./company-settings"
 import { CurrencySettings } from "./currency-settings"
 import { UserManagement } from "./user-management"
 import { StoreManagement } from "./store-management"
+import { ReceiptSettings } from "./receipt-settings"
 
 type Profile = {
   id: string
@@ -47,6 +48,7 @@ export function SettingsTabs({
         <TabsTrigger value="profile">Profile</TabsTrigger>
         <TabsTrigger value="company">Company</TabsTrigger>
         <TabsTrigger value="currency">Currency</TabsTrigger>
+        <TabsTrigger value="receipts">Receipts</TabsTrigger>
         {isAdmin && <TabsTrigger value="stores">Stores</TabsTrigger>}
         {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
       </TabsList>
@@ -61,6 +63,10 @@ export function SettingsTabs({
 
       <TabsContent value="currency" className="space-y-4">
         <CurrencySettings currencies={currencies} />
+      </TabsContent>
+
+      <TabsContent value="receipts" className="space-y-4">
+        <ReceiptSettings settings={settings} />
       </TabsContent>
 
       {isAdmin && (

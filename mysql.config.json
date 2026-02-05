@@ -3,6 +3,6 @@
   "port": 3306,
   "user": "root",
   "password": "",
-  "database": "epic_wines",
+  "database": "pos",
   "table": "stock"
 }
