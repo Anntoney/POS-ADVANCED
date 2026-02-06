@@ -4,7 +4,7 @@ module.exports = {
       name: 'sunprime-pos',
       script: 'npm',
       args: 'run start',
-      cwd: 'C:\\Users\\Administrator\\Documents\\pos\\POS-ADVANCED',
+      cwd: 'C:\sunprime\POS-ADVANCED',
       interpreter: 'none',
       env: {
         NODE_ENV: 'production',
