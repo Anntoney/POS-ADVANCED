@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'sunprime-pos',
-      script: 'npm',
+      script: 'node_modules/next/dist/bin/next',
       args: 'start',
       cwd: 'C:\\sunprime\\POS-ADVANCED',
       env: {
