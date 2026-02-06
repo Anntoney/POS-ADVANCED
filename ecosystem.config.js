@@ -5,6 +5,7 @@ module.exports = {
       script: 'node_modules/next/dist/bin/next',
       args: 'start',
       cwd: 'C:\\sunprime\\POS-ADVANCED',
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
