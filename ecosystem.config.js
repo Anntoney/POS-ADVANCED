@@ -3,9 +3,8 @@ module.exports = {
     {
       name: 'sunprime-pos',
       script: 'npm',
-      args: 'run start',
-      cwd: 'C:\sunprime\POS-ADVANCED',
-      interpreter: 'none',
+      args: 'start',
+      cwd: 'C:\\sunprime\\POS-ADVANCED',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
