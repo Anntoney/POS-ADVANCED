@@ -17,6 +17,7 @@ export default function SalesScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false)
   const [showEndPicker, setShowEndPicker] = useState(false)
   const [totalSales, setTotalSales] = useState(0)
+  const [totalGross, setTotalGross] = useState(0)
   const [currency, setCurrency] = useState<Currency | null>(null)
 
   useEffect(() => {
@@ -48,6 +49,29 @@ export default function SalesScreen() {
       
       const total = (data || []).reduce((sum, sale) => sum + sale.total_amount, 0)
       setTotalSales(total)
+
+      // Calculate total gross profit
+      if (data && data.length > 0) {
+        const saleIds = data.map(s => s.id)
+        const { data: saleItems, error: itemsError } = await supabase
+          .from('sale_items')
+          .select(`
+            quantity,
+            unit_price,
+            product:products(cost_price)
+          `)
+          .in('sale_id', saleIds)
+
+        if (!itemsError && saleItems) {
+          const grossProfit = saleItems.reduce((sum, item: any) => {
+            const profit = (item.unit_price - (item.product?.cost_price || 0)) * item.quantity
+            return sum + profit
+          }, 0)
+          setTotalGross(grossProfit)
+        }
+      } else {
+        setTotalGross(0)
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message)
     } finally {
@@ -141,6 +165,10 @@ export default function SalesScreen() {
           <Text style={styles.summaryLabel}>Total Sales</Text>
           <Text style={styles.summaryValue}>
             {currency ? formatCurrency(totalSales, currency) : `$${totalSales.toFixed(2)}`}
+          </Text>
+          <Text style={styles.summaryLabel}>Total Gross Profit</Text>
+          <Text style={styles.summaryValue}>
+            {currency ? formatCurrency(totalGross, currency) : `$${totalGross.toFixed(2)}`}
           </Text>
           <Text style={styles.summaryCount}>{sales.length} transactions</Text>
         </View>

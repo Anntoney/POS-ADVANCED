@@ -703,7 +703,17 @@ export function POSInterface({
                       >
                         <Minus className="h-4 w-4" />
                       </Button>
-                      <span className="w-10 text-center text-base font-semibold text-indigo-900 dark:text-indigo-100">{item.quantity}</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        max={item.product.stock_quantity}
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const newQty = parseInt(e.target.value) || 1
+                          updateQuantity(item.product.id, newQty)
+                        }}
+                        className="w-16 h-9 text-center text-base font-semibold text-indigo-900 dark:text-indigo-100 border-indigo-300 dark:border-indigo-700"
+                      />
                       <Button
                         size="icon"
                         variant="ghost"
@@ -797,10 +807,10 @@ export function POSInterface({
                     type="number"
                     step="0.01"
                     min="0"
-                          placeholder={`Amount (${currency?.symbol || "$"})`}
+                          placeholder="Enter Paid Amount"
                           value={payment.amount}
                           onChange={(e) => updatePayment(index, "amount", e.target.value)}
-                          className="h-11 text-base border-blue-500 focus:border-blue-600 focus:ring-blue-500 bg-blue-50 dark:bg-blue-950/20 text-blue-900 dark:text-blue-100 font-semibold"
+                          className="h-14 text-lg border-blue-500 focus:border-blue-600 focus:ring-blue-500 bg-blue-50 dark:bg-blue-950/20 text-blue-900 dark:text-blue-100 font-semibold"
                         />
                       </div>
                       {payments.length > 1 && (
@@ -817,17 +827,6 @@ export function POSInterface({
                     </div>
                   ))}
                 </div>
-                {getRemainingBalance() > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={autoFillRemaining}
-                    className="w-full h-10 text-sm"
-                  >
-                    Fill Remaining ({currency?.symbol || "$"}{getRemainingBalance().toFixed(2)})
-                  </Button>
-                )}
                 <div className="flex justify-between text-sm pt-2 border-t">
                   <span>Total Paid:</span>
                   <span className="font-semibold">
@@ -867,21 +866,6 @@ export function POSInterface({
                   )}
                 </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="discount" className="text-sm font-medium">
-                  Discount ({currency?.symbol || "$"})
-                </Label>
-                <Input
-                  id="discount"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                  className="h-11 text-base border-purple-500 focus:border-purple-600 focus:ring-purple-500 bg-purple-50 dark:bg-purple-950/20 text-purple-900 dark:text-purple-100 font-semibold"
-                />
-              </div>
-
               <div className="space-y-2 text-base">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
@@ -892,15 +876,6 @@ export function POSInterface({
                 <div className="flex justify-between">
                   <span>Tax:</span>
                   <span className="font-medium">{currency ? formatCurrency(calculateTax(), currency) : `$${calculateTax().toFixed(2)}`}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Discount:</span>
-                  <span className="font-medium">
-                    -
-                    {currency
-                      ? formatCurrency(Number.parseFloat(discount || "0"), currency)
-                      : `$${Number.parseFloat(discount || "0").toFixed(2)}`}
-                  </span>
                 </div>
                 <div className="flex justify-between text-xl font-bold pt-3 border-t-2 border-green-500">
                   <span className="text-green-700 dark:text-green-400">Total:</span>

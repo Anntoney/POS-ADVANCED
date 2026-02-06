@@ -20,7 +20,8 @@
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yourcompany.adminapp"
+      "package": "com.yourcompany.adminapp",
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro"
@@ -28,7 +29,10 @@
     "extra": {
       "eas": {
         "projectId": "b2372b2b-d6f5-4d2f-9b0d-5a8cac0dc9bb"
-      }
+      },
+      "EXPO_PUBLIC_SUPABASE_URL": "https://soqxolezaulotushohjd.supabase.co",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvcXhvbGV6YXVsb3R1c2hvaGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMzQ1MzMsImV4cCI6MjA4NTgxMDUzM30.MYPA-5QyUxdgfwMYJiJwN23CNMe1SU5hEWYu4kZUZuU",
+      "EXPO_PUBLIC_API_URL": "http://108.181.203.106:3001"
     }
   }
 }

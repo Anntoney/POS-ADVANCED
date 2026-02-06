@@ -99,6 +99,7 @@ export function ReceiptGenerator({
   const [saleItems, setSaleItems] = useState<SaleItem[]>([])
   const [salePayments, setSalePayments] = useState<SalePayment[]>([])
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+  const [cashierName, setCashierName] = useState<string>("Cashier")
 
   useEffect(() => {
     if (isOpen) {
@@ -115,6 +116,20 @@ export function ReceiptGenerator({
     const supabase = createClient()
 
     try {
+      // Get current user's profile for cashier name
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single()
+        
+        if (profile?.full_name) {
+          setCashierName(profile.full_name)
+        }
+      }
+
       // Load company settings
       const { data: settings } = await supabase
         .from("system_settings")
@@ -311,7 +326,7 @@ export function ReceiptGenerator({
         </head>
         <body>
           <div class="header">
-            <h1>${companySettings.company_name || "STORE NAME"}</h1>
+            <h1>${companySettings.company_name}</h1>
             ${companySettings.company_address ? `<p>${companySettings.company_address}</p>` : ""}
             ${companySettings.company_phone ? `<p>Tel: ${companySettings.company_phone}</p>` : ""}
             ${companySettings.company_email ? `<p>Email: ${companySettings.company_email}</p>` : ""}
@@ -322,7 +337,7 @@ export function ReceiptGenerator({
             <div><span>Receipt #:</span><span>${saleData.sale_number}</span></div>
             <div><span>Date:</span><span>${new Date(saleData.sale_date).toLocaleString()}</span></div>
             ${saleData.customers ? `<div><span>Customer:</span><span>${saleData.customers.name}</span></div>` : ""}
-            <div><span>Cashier:</span><span>System User</span></div>
+            <div><span>Cashier:</span><span>${cashierName}</span></div>
           </div>
 
           <div class="items">
@@ -454,7 +469,7 @@ export function ReceiptGenerator({
         </head>
         <body>
           <div class="header">
-            <h1>${companySettings.company_name || "STORE NAME"}</h1>
+            <h1>${companySettings.company_name}</h1>
             ${companySettings.company_address ? `<p>${companySettings.company_address}</p>` : ""}
             ${companySettings.company_phone ? `<p>Tel: ${companySettings.company_phone}</p>` : ""}
             ${companySettings.company_email ? `<p>Email: ${companySettings.company_email}</p>` : ""}

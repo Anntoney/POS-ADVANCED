@@ -195,7 +195,6 @@ After updating the API URL:
 cd mobileapp
 eas build --platform android --profile preview
 ```
-
 ---
 
 ## 🔄 Updating Your Deployment
