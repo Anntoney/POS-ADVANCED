@@ -90,8 +90,7 @@ export function ReceiptGenerator({
   paymentId,
   onPrintComplete
 }: ReceiptGeneratorProps) {
-  const [receiptFormat, setReceiptFormat] = useState<"thermal" | "standard">("thermal")
-  const [autoPrint, setAutoPrint] = useState(false)
+  const [receiptFormat] = useState<"thermal" | "standard">("thermal") // Always thermal
   const [isLoading, setIsLoading] = useState(false)
   const [currency, setCurrency] = useState<Currency | null>(null)
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null)
@@ -100,9 +99,11 @@ export function ReceiptGenerator({
   const [salePayments, setSalePayments] = useState<SalePayment[]>([])
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
   const [cashierName, setCashierName] = useState<string>("Cashier")
+  const [hasAutoPrinted, setHasAutoPrinted] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
+      setHasAutoPrinted(false)
       loadData()
     }
   }, [isOpen, saleId, paymentId, type])
@@ -110,6 +111,21 @@ export function ReceiptGenerator({
   useEffect(() => {
     getDefaultCurrency().then(setCurrency)
   }, [])
+
+  // Auto-print when data is loaded
+  useEffect(() => {
+    if (isOpen && !isLoading && !hasAutoPrinted && saleData && companySettings && currency) {
+      setHasAutoPrinted(true)
+      // Small delay to ensure everything is rendered, then print and close
+      setTimeout(() => {
+        handlePrint()
+        // Close our dialog immediately after triggering print
+        setTimeout(() => {
+          onClose()
+        }, 200)
+      }, 300)
+    }
+  }, [isOpen, isLoading, hasAutoPrinted, saleData, companySettings, currency])
 
   const loadData = async () => {
     setIsLoading(true)
@@ -546,16 +562,25 @@ export function ReceiptGenerator({
       printWindow.document.write(receiptHTML)
       printWindow.document.close()
       
-      if (autoPrint) {
+      // Wait for content to load, then auto-print
+      printWindow.onload = () => {
+        printWindow.focus()
         printWindow.print()
-        printWindow.onafterprint = () => {
-          printWindow.close()
-          onPrintComplete?.()
-          onClose()
-        }
-      } else {
-        onPrintComplete?.()
       }
+      
+      printWindow.onafterprint = () => {
+        printWindow.close()
+        onPrintComplete?.()
+        onClose()
+      }
+      
+      // Fallback: if onload doesn't fire, print after short delay
+      setTimeout(() => {
+        if (printWindow && !printWindow.closed) {
+          printWindow.focus()
+          printWindow.print()
+        }
+      }, 100)
     }
   }
 
@@ -576,65 +601,38 @@ export function ReceiptGenerator({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5" />
-            Print {type === "sale" ? "Sales" : "Payment"} Receipt
+            {isLoading ? "Preparing Receipt..." : "Printing Receipt"}
           </DialogTitle>
           <DialogDescription>
-            Configure and print a receipt for this {type === "sale" ? "sale" : "payment"}.
+            {isLoading ? "Loading receipt data..." : "Receipt is being sent to printer..."}
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
-          <div className="py-8 text-center">Loading receipt data...</div>
-        ) : (
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="format">Receipt Format</Label>
-              <Select value={receiptFormat} onValueChange={(value: "thermal" | "standard") => setReceiptFormat(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="thermal">Thermal (80mm) - POS Printer</SelectItem>
-                  <SelectItem value="standard">Standard (A4) - Regular Printer</SelectItem>
-                </SelectContent>
-              </Select>
+        <div className="py-8 text-center">
+          {isLoading ? (
+            <div className="space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="text-sm text-muted-foreground">Loading receipt data...</p>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="auto-print"
-                checked={autoPrint}
-                onCheckedChange={setAutoPrint}
-              />
-              <Label htmlFor="auto-print">Auto-print after opening</Label>
+          ) : (
+            <div className="space-y-4">
+              <Printer className="h-16 w-16 mx-auto text-primary animate-pulse" />
+              <div>
+                <p className="font-medium">Printing receipt...</p>
+                {type === "sale" && saleData && (
+                  <div className="text-sm text-muted-foreground mt-2">
+                    <p>Sale: {saleData.sale_number}</p>
+                    <p>Total: {currency ? formatCurrency(Number(saleData.total_amount), currency) : saleData.total_amount}</p>
+                  </div>
+                )}
+              </div>
             </div>
-
-            {type === "sale" && saleData && (
-              <div className="text-sm text-muted-foreground">
-                <p>Sale: {saleData.sale_number}</p>
-                <p>Total: {currency ? formatCurrency(Number(saleData.total_amount), currency) : saleData.total_amount}</p>
-                {saleData.customers && <p>Customer: {saleData.customers.name}</p>}
-              </div>
-            )}
-
-            {type === "payment" && paymentData && (
-              <div className="text-sm text-muted-foreground">
-                <p>Payment: {paymentData.payment_number}</p>
-                <p>Amount: {currency ? formatCurrency(Number(paymentData.amount), currency) : paymentData.amount}</p>
-                <p>Customer: {paymentData.customers.name}</p>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handlePreview} disabled={isLoading}>
-            <FileText className="h-4 w-4 mr-2" />
-            Preview
-          </Button>
-          <Button onClick={handlePrint} disabled={isLoading}>
-            <Printer className="h-4 w-4 mr-2" />
-            Print Receipt
+          <Button variant="outline" onClick={onClose}>
+            Close
           </Button>
         </DialogFooter>
       </DialogContent>
