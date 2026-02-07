@@ -62,7 +62,22 @@ type PaymentData = {
     email: string | null
     phone: string | null
     address: string | null
+    balance: number
   }
+}
+
+type CreditSale = {
+  id: string
+  sale_number: string
+  sale_date: string
+  total_amount: number
+  amount_paid: number
+  sale_items: {
+    product_name: string
+    quantity: number
+    unit_price: number
+    total_amount: number
+  }[]
 }
 
 type CompanySettings = {
@@ -98,6 +113,8 @@ export function ReceiptGenerator({
   const [saleItems, setSaleItems] = useState<SaleItem[]>([])
   const [salePayments, setSalePayments] = useState<SalePayment[]>([])
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+  const [creditSales, setCreditSales] = useState<CreditSale[]>([])
+  const [previousBalance, setPreviousBalance] = useState<number>(0)
   const [cashierName, setCashierName] = useState<string>("Cashier")
   const [hasAutoPrinted, setHasAutoPrinted] = useState(false)
 
@@ -114,18 +131,29 @@ export function ReceiptGenerator({
 
   // Auto-print when data is loaded
   useEffect(() => {
-    if (isOpen && !isLoading && !hasAutoPrinted && saleData && companySettings && currency) {
-      setHasAutoPrinted(true)
-      // Small delay to ensure everything is rendered, then print and close
-      setTimeout(() => {
-        handlePrint()
-        // Close our dialog immediately after triggering print
+    if (isOpen && !isLoading && !hasAutoPrinted) {
+      // For sales, check if sale data is loaded
+      if (type === "sale" && saleData && companySettings && currency) {
+        setHasAutoPrinted(true)
         setTimeout(() => {
-          onClose()
-        }, 200)
-      }, 300)
+          handlePrint()
+          setTimeout(() => {
+            onClose()
+          }, 200)
+        }, 300)
+      }
+      // For payments, check if payment data is loaded
+      else if (type === "payment" && paymentData && companySettings && currency) {
+        setHasAutoPrinted(true)
+        setTimeout(() => {
+          handlePrint()
+          setTimeout(() => {
+            onClose()
+          }, 200)
+        }, 300)
+      }
     }
-  }, [isOpen, isLoading, hasAutoPrinted, saleData, companySettings, currency])
+  }, [isOpen, isLoading, hasAutoPrinted, saleData, paymentData, companySettings, currency, type])
 
   const loadData = async () => {
     setIsLoading(true)
@@ -196,12 +224,44 @@ export function ReceiptGenerator({
           .from("customer_payments")
           .select(`
             *,
-            customers (name, email, phone, address)
+            customers (name, email, phone, address, balance)
           `)
           .eq("id", paymentId)
           .single()
 
-        if (payment) setPaymentData(payment)
+        if (payment) {
+          setPaymentData(payment)
+          
+          // Calculate previous balance (current balance + payment amount)
+          const currentBalance = Number(payment.customers.balance)
+          const paymentAmount = Number(payment.amount)
+          const prevBalance = currentBalance + paymentAmount
+          setPreviousBalance(prevBalance)
+          
+          // Load outstanding credit sales for this customer
+          const { data: sales } = await supabase
+            .from("sales")
+            .select(`
+              id,
+              sale_number,
+              sale_date,
+              total_amount,
+              amount_paid,
+              sale_items (
+                product_name,
+                quantity,
+                unit_price,
+                total_amount
+              )
+            `)
+            .eq("customer_id", payment.customer_id)
+            .in("payment_status", ["pending", "partial"])
+            .order("sale_date", { ascending: true })
+          
+          if (sales) {
+            setCreditSales(sales)
+          }
+        }
       }
     } catch (error) {
       console.error("Error loading receipt data:", error)
@@ -442,9 +502,12 @@ export function ReceiptGenerator({
     if (!paymentData || !companySettings || !currency) return ""
 
     const isThermal = receiptFormat === "thermal"
-    const width = isThermal ? "80mm" : "210mm"
-    const fontSize = isThermal ? "12px" : "14px"
-    const headerSize = isThermal ? "16px" : "20px"
+    const width = isThermal ? "72mm" : "210mm"
+    const fontSize = isThermal ? "14px" : "14px"
+    const headerSize = isThermal ? "18px" : "20px"
+
+    const newBalance = Number(paymentData.customers.balance)
+    const paymentAmount = Number(paymentData.amount)
 
     return `
       <!DOCTYPE html>
@@ -456,65 +519,151 @@ export function ReceiptGenerator({
               size: ${width} auto;
               margin: 0;
             }
+            * {
+              box-sizing: border-box;
+            }
             body {
               font-family: 'Courier New', monospace;
               font-size: ${fontSize};
-              line-height: 1.4;
+              font-weight: bold;
+              line-height: 1.5;
               margin: 0;
-              padding: ${isThermal ? "10px" : "20px"};
+              padding: ${isThermal ? "5mm" : "20px"};
               width: ${width};
-              box-sizing: border-box;
+              max-width: ${width};
             }
             .header {
               text-align: center;
-              margin-bottom: 15px;
-              border-bottom: 1px dashed #000;
-              padding-bottom: 10px;
+              margin-bottom: 10px;
+              border-bottom: 2px dashed #000;
+              padding-bottom: 8px;
             }
             .header h1 {
               font-size: ${headerSize};
               margin: 0 0 5px 0;
               font-weight: bold;
+              word-wrap: break-word;
             }
             .header p {
               margin: 2px 0;
-              font-size: ${isThermal ? "10px" : "12px"};
+              font-size: ${isThermal ? "11px" : "12px"};
+              word-wrap: break-word;
             }
             .receipt-type {
               text-align: center;
               font-weight: bold;
-              font-size: ${isThermal ? "14px" : "16px"};
-              margin-bottom: 15px;
-              padding: 5px;
-              border: 1px solid #000;
+              font-size: ${isThermal ? "16px" : "18px"};
+              margin: 10px 0;
+              padding: 8px;
+              border: 2px solid #000;
             }
-            .payment-info {
-              margin-bottom: 15px;
-              border-bottom: 1px dashed #000;
-              padding-bottom: 10px;
+            .receipt-info {
+              margin-bottom: 10px;
+              border-bottom: 2px dashed #000;
+              padding-bottom: 8px;
+              font-size: ${isThermal ? "13px" : "14px"};
             }
-            .payment-info div {
+            .receipt-info div {
               display: flex;
               justify-content: space-between;
               margin: 3px 0;
+              word-wrap: break-word;
             }
-            .amount {
-              text-align: center;
+            .receipt-info span:first-child {
+              flex-shrink: 0;
+              margin-right: 5px;
+            }
+            .receipt-info span:last-child {
+              text-align: right;
+              word-break: break-all;
+            }
+            .section-title {
               font-weight: bold;
-              font-size: ${isThermal ? "16px" : "20px"};
-              margin: 15px 0;
-              padding: 10px;
-              border: 2px solid #000;
+              font-size: ${isThermal ? "15px" : "16px"};
+              margin: 10px 0 5px 0;
+              border-bottom: 1px solid #000;
+              padding-bottom: 3px;
+            }
+            .items {
+              margin-bottom: 10px;
+            }
+            .item {
+              margin-bottom: 6px;
+              padding-bottom: 5px;
+              border-bottom: 1px dotted #000;
+            }
+            .item-header {
+              display: flex;
+              justify-content: space-between;
+              font-size: ${isThermal ? "12px" : "13px"};
+              color: #666;
+              margin-bottom: 2px;
+            }
+            .item-name {
+              font-weight: bold;
+              margin-bottom: 3px;
+              font-size: ${isThermal ? "13px" : "14px"};
+              word-wrap: break-word;
+            }
+            .item-details {
+              display: flex;
+              justify-content: space-between;
+              font-size: ${isThermal ? "13px" : "13px"};
+            }
+            .item-details span:first-child {
+              flex-shrink: 0;
+            }
+            .item-details span:last-child {
+              text-align: right;
+              margin-left: 5px;
+            }
+            .balance-summary {
+              border-top: 2px dashed #000;
+              border-bottom: 2px dashed #000;
+              padding: 8px 0;
+              margin: 10px 0;
+              font-size: ${isThermal ? "14px" : "15px"};
+            }
+            .balance-summary div {
+              display: flex;
+              justify-content: space-between;
+              margin: 4px 0;
+            }
+            .balance-row {
+              font-weight: bold;
+              font-size: ${isThermal ? "15px" : "16px"};
+            }
+            .payment-row {
+              font-weight: bold;
+              font-size: ${isThermal ? "16px" : "17px"};
+              color: #000;
+              background-color: #f0f0f0;
+              padding: 5px;
+              margin: 5px 0;
+            }
+            .new-balance {
+              font-weight: bold;
+              font-size: ${isThermal ? "16px" : "18px"};
+              border-top: 2px solid #000;
+              padding-top: 5px;
+              margin-top: 5px;
             }
             .footer {
               text-align: center;
-              margin-top: 15px;
-              border-top: 1px dashed #000;
-              padding-top: 10px;
-              font-size: ${isThermal ? "10px" : "12px"};
+              margin-top: 10px;
+              border-top: 2px dashed #000;
+              padding-top: 8px;
+              font-size: ${isThermal ? "12px" : "12px"};
+            }
+            .footer p {
+              margin: 3px 0;
+              word-wrap: break-word;
             }
             @media print {
-              body { margin: 0; }
+              body { 
+                margin: 0;
+                padding: ${isThermal ? "5mm" : "10mm"};
+              }
             }
           </style>
         </head>
@@ -523,28 +672,76 @@ export function ReceiptGenerator({
             <h1>${companySettings.company_name}</h1>
             ${companySettings.company_address ? `<p>${companySettings.company_address}</p>` : ""}
             ${companySettings.company_phone ? `<p>Tel: ${companySettings.company_phone}</p>` : ""}
-            ${companySettings.company_email ? `<p>Email: ${companySettings.company_email}</p>` : ""}
-            ${companySettings.tax_number ? `<p>Tax No: ${companySettings.tax_number}</p>` : ""}
+            ${companySettings.company_email ? `<p>${companySettings.company_email}</p>` : ""}
+            ${companySettings.tax_number ? `<p>Tax: ${companySettings.tax_number}</p>` : ""}
           </div>
 
           <div class="receipt-type">
             PAYMENT RECEIPT
           </div>
 
-          <div class="payment-info">
-            <div><span>Receipt #:</span><span>${paymentData.payment_number}</span></div>
+          <div class="receipt-info">
+            <div><span>Receipt:</span><span>${paymentData.payment_number}</span></div>
             <div><span>Date:</span><span>${new Date(paymentData.payment_date).toLocaleString()}</span></div>
             <div><span>Customer:</span><span>${paymentData.customers.name}</span></div>
             ${paymentData.customers.phone ? `<div><span>Phone:</span><span>${paymentData.customers.phone}</span></div>` : ""}
-            <div><span>Payment Method:</span><span>${paymentData.payment_method.toUpperCase()}</span></div>
+            <div><span>Method:</span><span>${paymentData.payment_method.toUpperCase()}</span></div>
+            <div><span>Cashier:</span><span>${cashierName}</span></div>
           </div>
 
-          <div class="amount">
-            AMOUNT PAID: ${formatCurrency(Number(paymentData.amount), currency)}
+          ${creditSales.length > 0 ? `
+            <div class="section-title">OUTSTANDING ITEMS</div>
+            <div class="items">
+              ${creditSales.map(sale => `
+                <div style="margin-bottom: 10px;">
+                  <div class="item-header">
+                    <span>${sale.sale_number}</span>
+                    <span>${new Date(sale.sale_date).toLocaleDateString()}</span>
+                  </div>
+                  ${sale.sale_items.map(item => `
+                    <div class="item">
+                      <div class="item-name">${item.product_name}</div>
+                      <div class="item-details">
+                        <span>${item.quantity} x ${formatCurrency(Number(item.unit_price), currency)}</span>
+                        <span>${formatCurrency(Number(item.total_amount), currency)}</span>
+                      </div>
+                    </div>
+                  `).join("")}
+                  <div class="item-details" style="font-weight: bold; margin-top: 3px;">
+                    <span>Sale Total:</span>
+                    <span>${formatCurrency(Number(sale.total_amount), currency)}</span>
+                  </div>
+                  <div class="item-details" style="color: #666;">
+                    <span>Paid:</span>
+                    <span>${formatCurrency(Number(sale.amount_paid), currency)}</span>
+                  </div>
+                  <div class="item-details" style="font-weight: bold; color: #c00;">
+                    <span>Balance:</span>
+                    <span>${formatCurrency(Number(sale.total_amount) - Number(sale.amount_paid), currency)}</span>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          ` : ""}
+
+          <div class="balance-summary">
+            <div class="section-title" style="border: none; margin: 0 0 8px 0;">PAYMENT SUMMARY</div>
+            <div class="balance-row">
+              <span>Previous Balance:</span>
+              <span>${formatCurrency(previousBalance, currency)}</span>
+            </div>
+            <div class="payment-row">
+              <span>Payment Received:</span>
+              <span>-${formatCurrency(paymentAmount, currency)}</span>
+            </div>
+            <div class="new-balance">
+              <span>New Balance:</span>
+              <span>${formatCurrency(newBalance, currency)}</span>
+            </div>
           </div>
 
           <div class="footer">
-            <p>Payment received with thanks!</p>
+            <p>Thank you for your payment!</p>
             <p>Please keep this receipt for your records</p>
             ${paymentData.notes ? `<p>Note: ${paymentData.notes}</p>` : ""}
           </div>
