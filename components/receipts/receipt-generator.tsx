@@ -553,9 +553,10 @@ export function ReceiptGenerator({
               text-align: center;
               font-weight: bold;
               font-size: ${isThermal ? "16px" : "18px"};
-              margin: 10px 0;
+              margin: 0 0 10px 0;
               padding: 8px;
               border: 2px solid #000;
+              border-bottom: 2px dashed #000;
             }
             .receipt-info {
               margin-bottom: 10px;
@@ -668,14 +669,6 @@ export function ReceiptGenerator({
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>${companySettings.company_name}</h1>
-            ${companySettings.company_address ? `<p>${companySettings.company_address}</p>` : ""}
-            ${companySettings.company_phone ? `<p>Tel: ${companySettings.company_phone}</p>` : ""}
-            ${companySettings.company_email ? `<p>${companySettings.company_email}</p>` : ""}
-            ${companySettings.tax_number ? `<p>Tax: ${companySettings.tax_number}</p>` : ""}
-          </div>
-
           <div class="receipt-type">
             PAYMENT RECEIPT
           </div>
