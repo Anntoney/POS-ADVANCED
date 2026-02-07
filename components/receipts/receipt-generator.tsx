@@ -206,9 +206,9 @@ export function ReceiptGenerator({
     if (!saleData || !companySettings || !currency) return ""
 
     const isThermal = receiptFormat === "thermal"
-    const width = isThermal ? "80mm" : "210mm"
-    const fontSize = isThermal ? "12px" : "14px"
-    const headerSize = isThermal ? "16px" : "20px"
+    const width = isThermal ? "72mm" : "210mm"
+    const fontSize = isThermal ? "14px" : "14px"
+    const headerSize = isThermal ? "18px" : "20px"
 
     const change = salePayments.reduce((sum, p) => sum + Number(p.amount), 0) - Number(saleData.total_amount)
 
@@ -222,105 +222,140 @@ export function ReceiptGenerator({
               size: ${width} auto;
               margin: 0;
             }
+            * {
+              box-sizing: border-box;
+            }
             body {
               font-family: 'Courier New', monospace;
               font-size: ${fontSize};
-              line-height: 1.4;
+              font-weight: bold;
+              line-height: 1.5;
               margin: 0;
-              padding: ${isThermal ? "10px" : "20px"};
+              padding: ${isThermal ? "5mm" : "20px"};
               width: ${width};
-              box-sizing: border-box;
+              max-width: ${width};
             }
             .header {
               text-align: center;
-              margin-bottom: 15px;
-              border-bottom: 1px dashed #000;
-              padding-bottom: 10px;
+              margin-bottom: 10px;
+              border-bottom: 2px dashed #000;
+              padding-bottom: 8px;
             }
             .header h1 {
               font-size: ${headerSize};
               margin: 0 0 5px 0;
               font-weight: bold;
+              word-wrap: break-word;
             }
             .header p {
               margin: 2px 0;
-              font-size: ${isThermal ? "10px" : "12px"};
+              font-size: ${isThermal ? "11px" : "12px"};
+              word-wrap: break-word;
             }
             .receipt-info {
-              margin-bottom: 15px;
-              border-bottom: 1px dashed #000;
-              padding-bottom: 10px;
+              margin-bottom: 10px;
+              border-bottom: 2px dashed #000;
+              padding-bottom: 8px;
+              font-size: ${isThermal ? "13px" : "14px"};
             }
             .receipt-info div {
               display: flex;
               justify-content: space-between;
-              margin: 2px 0;
+              margin: 3px 0;
+              word-wrap: break-word;
+            }
+            .receipt-info span:first-child {
+              flex-shrink: 0;
+              margin-right: 5px;
+            }
+            .receipt-info span:last-child {
+              text-align: right;
+              word-break: break-all;
             }
             .items {
-              margin-bottom: 15px;
+              margin-bottom: 10px;
             }
             .item {
               margin-bottom: 8px;
-              border-bottom: 1px dotted #ccc;
+              border-bottom: 1px dotted #000;
               padding-bottom: 5px;
             }
             .item-name {
               font-weight: bold;
-              margin-bottom: 2px;
+              margin-bottom: 3px;
+              font-size: ${isThermal ? "14px" : "14px"};
+              word-wrap: break-word;
             }
             .item-details {
               display: flex;
               justify-content: space-between;
-              font-size: ${isThermal ? "11px" : "13px"};
+              font-size: ${isThermal ? "13px" : "13px"};
+            }
+            .item-details span:first-child {
+              flex-shrink: 0;
+            }
+            .item-details span:last-child {
+              text-align: right;
+              margin-left: 5px;
             }
             .totals {
-              border-top: 1px dashed #000;
-              padding-top: 10px;
-              margin-bottom: 15px;
+              border-top: 2px dashed #000;
+              padding-top: 8px;
+              margin-bottom: 10px;
+              font-size: ${isThermal ? "14px" : "15px"};
             }
             .totals div {
               display: flex;
               justify-content: space-between;
-              margin: 3px 0;
+              margin: 4px 0;
             }
             .total-line {
               font-weight: bold;
-              font-size: ${isThermal ? "13px" : "15px"};
-              border-top: 1px solid #000;
+              font-size: ${isThermal ? "16px" : "17px"};
+              border-top: 2px solid #000;
               padding-top: 5px;
               margin-top: 5px;
             }
             .payments {
-              margin-bottom: 15px;
-              border-top: 1px dashed #000;
-              padding-top: 10px;
+              margin-bottom: 10px;
+              border-top: 2px dashed #000;
+              padding-top: 8px;
+              font-size: ${isThermal ? "14px" : "14px"};
             }
             .payments h3 {
-              margin: 0 0 8px 0;
-              font-size: ${isThermal ? "12px" : "14px"};
+              margin: 0 0 5px 0;
+              font-size: ${isThermal ? "15px" : "16px"};
+              font-weight: bold;
             }
             .payment-item {
               display: flex;
               justify-content: space-between;
-              margin: 2px 0;
+              margin: 3px 0;
             }
             .change {
               font-weight: bold;
-              font-size: ${isThermal ? "13px" : "15px"};
+              font-size: ${isThermal ? "16px" : "17px"};
               text-align: center;
               margin: 10px 0;
-              padding: 5px;
-              border: 1px solid #000;
+              padding: 8px;
+              border: 2px solid #000;
             }
             .footer {
               text-align: center;
-              margin-top: 15px;
-              border-top: 1px dashed #000;
-              padding-top: 10px;
-              font-size: ${isThermal ? "10px" : "12px"};
+              margin-top: 10px;
+              border-top: 2px dashed #000;
+              padding-top: 8px;
+              font-size: ${isThermal ? "12px" : "12px"};
+            }
+            .footer p {
+              margin: 3px 0;
+              word-wrap: break-word;
             }
             @media print {
-              body { margin: 0; }
+              body { 
+                margin: 0;
+                padding: ${isThermal ? "5mm" : "10mm"};
+              }
             }
           </style>
         </head>
@@ -329,12 +364,12 @@ export function ReceiptGenerator({
             <h1>${companySettings.company_name}</h1>
             ${companySettings.company_address ? `<p>${companySettings.company_address}</p>` : ""}
             ${companySettings.company_phone ? `<p>Tel: ${companySettings.company_phone}</p>` : ""}
-            ${companySettings.company_email ? `<p>Email: ${companySettings.company_email}</p>` : ""}
-            ${companySettings.tax_number ? `<p>Tax No: ${companySettings.tax_number}</p>` : ""}
+            ${companySettings.company_email ? `<p>${companySettings.company_email}</p>` : ""}
+            ${companySettings.tax_number ? `<p>Tax: ${companySettings.tax_number}</p>` : ""}
           </div>
 
           <div class="receipt-info">
-            <div><span>Receipt #:</span><span>${saleData.sale_number}</span></div>
+            <div><span>Receipt:</span><span>${saleData.sale_number}</span></div>
             <div><span>Date:</span><span>${new Date(saleData.sale_date).toLocaleString()}</span></div>
             ${saleData.customers ? `<div><span>Customer:</span><span>${saleData.customers.name}</span></div>` : ""}
             <div><span>Cashier:</span><span>${cashierName}</span></div>
